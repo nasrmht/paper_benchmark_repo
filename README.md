@@ -2,7 +2,7 @@
 
 Reproduction code and pre-computed results for the paper:
 
-> **[Paper title]** — [Authors], [Year]
+> **Prediction of physical fields under linear constraints** — [Mahamat], [2026]
 
 This repository covers three classes of experiments:
 

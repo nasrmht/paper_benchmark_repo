@@ -1,0 +1,29 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Results (zarr are large — track with Git LFS or host externally)
+results/lotka_volterra/
+results/cfd/
+# Keep constraint_benchmark results (small pkl files)
+!results/constraint_benchmark/
+
+# Generated figures
+figures/
+figures_cfd/
+figure_lv/
+*.pdf
+*.svg
+*.png
+
+# Misc
+.DS_Store
+.venv/
+venv/

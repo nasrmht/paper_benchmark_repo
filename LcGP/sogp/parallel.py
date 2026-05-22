@@ -11,17 +11,17 @@ class P_so_GPRegression:
     def __init__(self, kernel=None, mean_prior='zero', var_noise=1e-13, noisy_data=True, use_kernel_grad=False, 
                  optimizer='L-BFGS-B', parallel=False, n_jobs=-1, verbose=0):
         """
-        Initialise le modèle de régression par processus gaussien avec support de parallélisation.
+        Initializes the Gaussian process regression model with parallelization support.
         
-        :param kernel: Fonction noyau qui prend des paramètres et des entrées, et retourne une matrice de covariance.
-        :param mean_prior: Type de moyenne a priori ('zero' ou 'constant').
-        :param var_noise: Variance du bruit (utilisée si noisy_data=True).
-        :param noisy_data: Booléen pour faire de l'interpolation (False) ou régression (True).
-        :param use_kernel_grad: Utiliser le gradient analytique du noyau.
-        :param optimizer: Optimiseur à utiliser pour l'optimisation des hyperparamètres.
-        :param parallel: Activer la parallélisation pour multi-start.
-        :param n_jobs: Nombre de jobs pour la parallélisation (-1 = tous les cœurs).
-        :param verbose: Niveau de verbosité pour l'affichage des informations pendant l'optimisation.
+        :param kernel: Kernel function that takes parameters and inputs, and returns a covariance matrix.
+        :param mean_prior: Prior mean type ('zero' or 'constant').
+        :param var_noise: Noise variance (used if noisy_data=True).
+        :param noisy_data: Boolean to perform interpolation (False) or regression (True).
+        :param use_kernel_grad: Use the analytical gradient of the kernel.
+        :param optimizer: Optimizer to use for hyperparameter optimization.
+        :param parallel: Enable parallelization for multi-start.
+        :param n_jobs: Number of jobs for parallelization (-1 = all cores).
+        :param verbose: Verbosity level for displaying information during optimization.
         """
         self.optimizer = optimizer
         self.kernel = kernel if kernel is not None else RBFKernel()
@@ -49,32 +49,32 @@ class P_so_GPRegression:
     
     def _initialize_hyperparameters(self, num_params, kernel_params_0, var_noise_0, custom_bounds, multi_start, n_start):
         """
-        Initialise les hyperparamètres aléatoirement ou par LHS si multi-start est activé.
+        Initializes the hyperparameters randomly or via LHS if multi-start is enabled.
         
-        :param num_params: Nombre total d'hyperparamètres.
-        :param kernel_params_0: Valeurs initiales pour les paramètres du noyau.
-        :param var_noise_0: Valeur initiale pour la variance du bruit.
-        :param custom_bounds: Bornes d'initialisation.
-        :param multi_start: Activer l'initialisation multiple.
-        :param n_start: Nombre de points de départ si multi_start est activé.
-        :return: Array de points initiaux pour l'optimisation.
+        :param num_params: Total number of hyperparameters.
+        :param kernel_params_0: Initial values for the kernel parameters.
+        :param var_noise_0: Initial value for the noise variance.
+        :param custom_bounds: Initialization bounds.
+        :param multi_start: Enable multiple initializations.
+        :param n_start: Number of starting points if multi_start is enabled.
+        :return: Array of initial points for optimization.
         """
         n_params_k = self.X_train.shape[1] if self.X_train.ndim > 1 else 1
         np.random.seed(42)
         
         if multi_start:
-            # Génération efficace des points initiaux avec LHS
+            # Efficient generation of initial points with LHS
             lhs = LatinHypercube(d=num_params, seed=42)
-            sampled_points = lhs.random(n=n_start)  # n_start points dans [0,1]^d
+            sampled_points = lhs.random(n=n_start)  # n_start points in [0,1]^d
             
-            # Mise à l'échelle des points LHS dans les bornes spécifiées
-            # Optimisation: calcul vectorisé au lieu d'une boucle
+            # Scaling LHS points to the specified bounds
+            # Optimization: vectorized computation instead of a loop
             init_params_list = custom_bounds[:, 0] + sampled_points * (custom_bounds[:, 1] - custom_bounds[:, 0])
             
-            # Reshape pour obtenir (n_start, num_params)
+            # Reshape to get (n_start, num_params)
             init_params_list = init_params_list.reshape(n_start, num_params)
         else:
-            # Initialisation simple sans multi-start
+            # Simple initialization without multi-start
             kernel_params_0 = (np.array(kernel_params_0) if kernel_params_0 is not None 
                               else np.random.uniform(custom_bounds[:n_params_k, 0], custom_bounds[:n_params_k, 1], size=n_params_k))
             
@@ -84,16 +84,16 @@ class P_so_GPRegression:
             else:
                 init_params = kernel_params_0
                 
-            init_params_list = init_params.reshape(1, -1)  # Reshape pour assurer la cohérence de forme
+            init_params_list = init_params.reshape(1, -1)  # Reshape to ensure shape consistency
             
         return init_params_list
     
     def n_log_marginal_likelihood(self, params):
         """
-        Calcule la log-vraisemblance marginale négative.
+        Computes the negative marginal log-likelihood.
         
-        :param params: Hyperparamètres du noyau et du modèle.
-        :return: Log-vraisemblance marginale négative.
+        :param params: Kernel and model hyperparameters.
+        :return: Negative marginal log-likelihood.
         """
         n = self.X_train.shape[0]
         
@@ -106,40 +106,40 @@ class P_so_GPRegression:
             self.kernel.hyperparams = kernel_params
             var_noise = self.var_noise
         
-        # Calcul de la matrice de covariance
+        # Compute the covariance matrix
         K = self.kernel(self.X_train) + var_noise * np.eye(n)
-        K = (K + K.T) / 2  # Assurer la symétrie numérique
+        K = (K + K.T) / 2  # Ensure numerical symmetry
         
         try:
             L = cholesky(K, lower=True)
         except np.linalg.LinAlgError:
-            # En cas d'échec de Cholesky, retourner une valeur élevée
+            # In case Cholesky fails, return a high value
             return 1e10
         
         one_1 = np.ones((n, 1))
         
-        # Calcul efficace avec solve_triangular
+        # Efficient calculation with solve_triangular
         alpha_y = solve_triangular(L.T, solve_triangular(L, self.y_train, lower=True))
         
-        # Calcul de la moyenne a priori
+        # Compute the prior mean
         if self.mean_prior == 'zero':
             mean_hat = 0.0
         elif self.mean_prior == 'constant':
             alpha_one = solve_triangular(L.T, solve_triangular(L, one_1, lower=True))
             mean_hat = (one_1.T @ alpha_y) / (one_1.T @ alpha_one)
         else:
-            raise ValueError(f"Erreur : mean_prior ne peut être défini que comme 'constant' ou 'zero' !!")
+            raise ValueError(f"Error: mean_prior can only be defined as 'constant' or 'zero' !!")
         
-        # Calcul optimisé de la log-vraisemblance
+        # Optimized calculation of the log-likelihood
         y_centered = self.y_train - mean_hat * one_1
         alpha_one_y = solve_triangular(L.T, solve_triangular(L, y_centered, lower=True))
         L_T_y = solve_triangular(L, y_centered, lower=True)
-        sigma_k2 = (L_T_y.T @ L_T_y) / n  # Moyenne de la variance expliquée
+        sigma_k2 = (L_T_y.T @ L_T_y) / n  # Mean of the explained variance
         
-        # Calcul optimisé de log-likelihood
+        # Optimized calculation of log-likelihood
         n_log_l = 0.5 * n * np.log(sigma_k2) + 0.5 * n + np.sum(np.log(np.diag(L))) + 0.5 * n * np.log(2 * np.pi)
         
-        # Sauvegarde pour la prédiction
+        # Save for prediction
         self.cholesky_K = L
         self.sigma_k = np.sqrt(sigma_k2)
         self.alpha_one_y = alpha_one_y
@@ -149,14 +149,14 @@ class P_so_GPRegression:
     
     def n_log_marginal_likelihood_grad(self, params):
         """
-        Calcule le gradient de la log-vraisemblance marginale négative.
+        Computes the gradient of the negative marginal log-likelihood.
         
-        :param params: Hyperparamètres du noyau et du modèle.
-        :return: Gradient de la log-vraisemblance marginale négative.
+        :param params: Kernel and model hyperparameters.
+        :return: Gradient of the negative marginal log-likelihood.
         """
         n = self.y_train.shape[0]
         
-        # Configuration des paramètres selon le modèle
+        # Configure parameters depending on the model
         if self.noisy_data:
             kernel_params = np.exp(params[:-1])
             self.kernel.hyperparams = kernel_params
@@ -168,20 +168,20 @@ class P_so_GPRegression:
         
         n_params_K = kernel_params.shape[0]
         
-        # Calcul efficace de la matrice de covariance et décomposition
+        # Efficient computation of the covariance matrix and decomposition
         K = self.kernel(self.X_train) + var_noise * np.eye(n)
         
         try:
             L = cholesky(K, lower=True)
         except np.linalg.LinAlgError:
-            # Retourner un gradient nul en cas d'échec de Cholesky
+            # Return a zero gradient if Cholesky fails
             grad_size = n_params_K + 1 if self.noisy_data else n_params_K
             return np.zeros(grad_size)
         
-        # Calcul optimisé de K_inv
+        # Optimized computation of K_inv
         K_inv = solve_triangular(L.T, solve_triangular(L, np.eye(n), lower=True))
         
-        # Calcul de la moyenne a priori
+        # Compute the prior mean
         if self.mean_prior == 'zero':
             mean_hat = 0.0
         elif self.mean_prior == 'constant':
@@ -190,48 +190,48 @@ class P_so_GPRegression:
             alpha_one = K_inv @ one_1
             mean_hat = (one_1.T @ alpha_y) / (one_1.T @ alpha_one)
         else:
-            raise ValueError("Erreur : mean_prior ne peut être défini que comme 'constant' ou 'zero' !!")
+            raise ValueError("Error: mean_prior can only be defined as 'constant' or 'zero' !!")
         
-        # Calcul efficace de y_centered
+        # Efficient computation of y_centered
         one_1 = np.ones_like(self.y_train)
         y_centered = self.y_train - mean_hat * one_1
         
-        # Calcul optimisé de alpha_one_y
+        # Optimized computation of alpha_one_y
         alpha_one_y = K_inv @ y_centered
         
-        # Calcul du sigma_k2
+        # Compute sigma_k2
         sigma_k2 = (y_centered.T @ alpha_one_y) / n
         
-        # Terme commun pour le calcul des gradients
+        # Common term for gradient computation
         term_commun = 1.0 / sigma_k2
         
-        # Calcul efficace de alpha_alpha_T
+        # Efficient computation of alpha_alpha_T
         alpha_alpha_T = np.outer(alpha_one_y, alpha_one_y)
         
-        # Terme commun optimisé
+        # Optimized common term
         term_c = 0.5 * (alpha_alpha_T * term_commun * n - K_inv)
         
-        # Calcul des dérivées partielles par rapport aux hyperparamètres du noyau
+        # Compute partial derivatives with respect to the kernel hyperparameters
         dK_dTheta = self.kernel.grad_K(self.X_train)
         
-        # Pré-allocation pour les gradients
+        # Pre-allocation for gradients
         grad_theta_list = np.zeros(n_params_K)
         
-        # Calcul vectorisé des gradients
+        # Vectorized computation of gradients
         for i, dK_dtheta in enumerate(np.rollaxis(dK_dTheta, 2)):
-            # Calcul optimisé du gradient
+            # Optimized computation of the gradient
             grad_theta_list[i] = -np.sum(term_c * dK_dtheta)
         
-        # Application du facteur d'échelle pour les paramètres log-transformés
+        # Apply scale factor for log-transformed parameters
         grad_theta_list *= kernel_params
         
-        # Ajout du gradient pour la variance du bruit si nécessaire
+        # Add gradient for the noise variance if necessary
         if self.noisy_data:
-            # Gradient pour la variance du bruit (pas d'échelle logarithmique)
+            # Gradient for the noise variance (no logarithmic scale)
             dK_dvar = np.eye(n)
             grad_var = -np.sum(term_c * dK_dvar)
             
-            # Combinaison des gradients
+            # Combine gradients
             grad_Cov = np.append(grad_theta_list, grad_var)
         else:
             grad_Cov = grad_theta_list
@@ -240,16 +240,16 @@ class P_so_GPRegression:
     
     def _optimize_single_start(self, init_params, bounds):
         """
-        Optimise les hyperparamètres à partir d'un point de départ.
+        Optimizes hyperparameters starting from a given initial point.
         
-        :param init_params: Paramètres initiaux.
-        :param bounds: Bornes pour l'optimisation.
-        :return: Résultat d'optimisation et paramètres associés.
+        :param init_params: Initial parameters.
+        :param bounds: Bounds for optimization.
+        :return: Optimization result and associated parameters.
         """
         start_time = time.time()
         
         if self.use_kernel_grad:
-            # Optimisation avec gradient analytique
+            # Optimization with analytical gradient
             results = minimize(
                 self.n_log_marginal_likelihood,
                 init_params,
@@ -259,7 +259,7 @@ class P_so_GPRegression:
                 options={'maxiter': 200}
             )
         else:
-            # Optimisation sans gradient analytique
+            # Optimization without analytical gradient
             results = minimize(
                 self.n_log_marginal_likelihood,
                 init_params,
@@ -268,34 +268,34 @@ class P_so_GPRegression:
                 options={'maxiter': 200}
             )
         
-        # Durée de l'optimisation
+        # Duration of optimization
         duration = time.time() - start_time
         
-        # Retourner les résultats et les paramètres associés
+        # Return results and associated parameters
         return results, self.cholesky_K, self.alpha_one_y, self.sigma_k, self.mean_p, duration
     
     def _optimize_hyperparameters(self, init_k_params, init_var_noise, multi_start, n_start, theta_lb, theta_ub, var_lb, var_ub):
         """
-        Optimise les hyperparamètres avec support pour la parallélisation multi-start.
+        Optimizes hyperparameters with support for parallel multi-start.
         
-        :param init_k_params: Valeurs initiales pour les paramètres du noyau.
-        :param init_var_noise: Valeur initiale pour la variance du bruit.
-        :param multi_start: Activer l'initialisation multiple.
-        :param n_start: Nombre de points de départ si multi_start est activé.
-        :param theta_lb, theta_ub: Bornes inférieures et supérieures pour les hyperparamètres du noyau.
-        :param var_lb, var_ub: Bornes inférieures et supérieures pour la variance du bruit.
-        :return: Résultat d'optimisation avec les meilleurs hyperparamètres.
+        :param init_k_params: Initial values for the kernel parameters.
+        :param init_var_noise: Initial value for the noise variance.
+        :param multi_start: Enable multiple starting points.
+        :param n_start: Number of starting points if multi_start is enabled.
+        :param theta_lb, theta_ub: Lower and upper bounds for the kernel hyperparameters.
+        :param var_lb, var_ub: Lower and upper bounds for the noise variance.
+        :return: Optimization result with the best hyperparameters.
         """
-        # Détermination du nombre de paramètres du noyau
+        # Determine the number of kernel parameters
         if init_k_params is not None:
             len_kern_hyp = len(init_k_params)
         else:
             len_kern_hyp = self.X_train.shape[1] if self.X_train.ndim > 1 else 1
         
-        # Nombre total de paramètres (noyau + bruit si applicable)
+        # Total number of parameters (kernel + noise if applicable)
         num_params = len_kern_hyp + 1 if self.noisy_data else len_kern_hyp
         
-        # Bornes pour les hyperparamètres du noyau
+        # Bounds for the kernel hyperparameters
         Theta_lb = theta_lb if theta_lb is not None else 1e-3 * np.ones(len_kern_hyp)
         
         if theta_ub is not None:
@@ -306,11 +306,11 @@ class P_so_GPRegression:
             else:
                 Theta_ub = 10 * (np.max(self.X_train) - np.min(self.X_train)) * np.ones(len_kern_hyp)
                 
-        # Bornes pour la variance du bruit
+        # Bounds for the noise variance
         var_lb = var_lb if var_lb is not None else 1e-9 * np.var(self.y_train)
         var_ub = var_ub if var_ub is not None else np.var(self.y_train)
         
-        # Préparation des bornes pour l'optimisation
+        # Prepare the bounds for optimization
         custom_bounds = np.vstack([np.log(Theta_lb), np.log(Theta_ub)]).T
         
         if self.noisy_data:
@@ -318,45 +318,45 @@ class P_so_GPRegression:
         
         bounds = [tuple(sous_bounds) for sous_bounds in custom_bounds]
         
-        # Initialisation des paramètres
+        # Parameter initialization
         init_params_list = self._initialize_hyperparameters(num_params, init_k_params, init_var_noise, 
-                                                          custom_bounds, multi_start, n_start)
+                                                           custom_bounds, multi_start, n_start)
         
         if self.verbose > 0:
-            print(f"Optimisation avec {init_params_list.shape[0]} points de départ")
+            print(f"Optimization with {init_params_list.shape[0]} starting points")
         
-        # Optimisation parallèle si demandée et plusieurs points de départ
+        # Parallel optimization if requested and multiple starting points
         if multi_start and self.parallel and init_params_list.shape[0] > 1:
             try:
                 if self.verbose > 0:
-                    print(f"Exécution parallèle avec {self.n_jobs} jobs")
+                    print(f"Parallel execution with {self.n_jobs} jobs")
                 
-                # Exécution parallèle avec joblib
+                # Parallel execution with joblib
                 results = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
                     delayed(self._optimize_single_start)(params, bounds) 
                     for params in init_params_list
                 )
                 
-                # Sélection du meilleur résultat
+                # Select the best result
                 sorted_results = sorted(results, key=lambda res: res[0].fun)
                 best_result, best_cholesky_K, best_alpha, best_sigma_k, best_mean, duration = sorted_results[0]
                 
                 if self.verbose > 0:
                     for i, (res, _, _, _, _, dur) in enumerate(sorted_results):
-                        print(f"Run {i+1}: nLL = {res.fun:.6f}, durée = {dur:.2f}s")
+                        print(f"Run {i+1}: nLL = {res.fun:.6f}, duration = {dur:.2f}s")
                     
             except Exception as e:
                 if self.verbose > 0:
-                    print(f"Erreur de parallélisation: {str(e)}. Repli sur exécution séquentielle.")
+                    print(f"Parallelization error: {str(e)}. Fallback to sequential execution.")
                 
-                # Exécution séquentielle en cas d'échec
+                # Sequential execution in case of failure
                 results = [self._optimize_single_start(params, bounds) for params in init_params_list]
                 sorted_results = sorted(results, key=lambda res: res[0].fun)
                 best_result, best_cholesky_K, best_alpha, best_sigma_k, best_mean, duration = sorted_results[0]
         else:
-            # Exécution séquentielle
+            # Sequential execution
             if self.verbose > 0 and multi_start and init_params_list.shape[0] > 1:
-                print("Exécution séquentielle des optimisations")
+                print("Sequential execution of optimizations")
                 
             results = []
             for i, params in enumerate(init_params_list):
@@ -364,24 +364,24 @@ class P_so_GPRegression:
                 results.append((res, chol, alpha, sigma, mean, dur))
                 
                 if self.verbose > 0:
-                    print(f"Run {i+1}: nLL = {res.fun:.6f}, durée = {dur:.2f}s")
+                    print(f"Run {i+1}: nLL = {res.fun:.6f}, duration = {dur:.2f}s")
             
-            # Sélection du meilleur résultat
+            # Select the best result
             sorted_results = sorted(results, key=lambda res: res[0].fun)
             best_result, best_cholesky_K, best_alpha, best_sigma_k, best_mean, duration = sorted_results[0]
         
         if self.verbose > 0:
-            print(f"Meilleure optimisation: nLL = {best_result.fun:.6f}, durée = {duration:.2f}s")
+            print(f"Best optimization: nLL = {best_result.fun:.6f}, duration = {duration:.2f}s")
             
             if self.noisy_data:
                 kernel_params = np.exp(best_result.x[:-1])
                 noise_var = best_result.x[-1]
-                print(f"Hyperparamètres optimaux: kernels = {kernel_params}, bruit = {noise_var}")
+                print(f"Optimal hyperparameters: kernels = {kernel_params}, noise = {noise_var}")
             else:
                 kernel_params = np.exp(best_result.x)
-                print(f"Hyperparamètres optimaux: kernels = {kernel_params}")
+                print(f"Optimal hyperparameters: kernels = {kernel_params}")
         
-        # Mise à jour des variables d'état
+        # Update the state variables
         self.cholesky_K = best_cholesky_K
         self.alpha_one_y = best_alpha
         self.sigma_k = best_sigma_k
@@ -392,19 +392,19 @@ class P_so_GPRegression:
     def fit(self, X, y, multi_start=False, n_start=5, theta_0=None, var_noise_0=None, 
             theta_lb=None, theta_ub=None, var_lb=None, var_ub=None):
         """
-        Ajuste le modèle aux données d'entraînement avec optimisation parallèle des hyperparamètres.
+        Fits the model to the training data with parallel hyperparameter optimization.
         
-        :param X: Entrées d'entraînement.
-        :param y: Sorties d'entraînement.
-        :param multi_start: Activer l'initialisation multiple.
-        :param n_start: Nombre de points de départ si multi_start est activé.
-        :param theta_0: Valeurs initiales pour les hyperparamètres du noyau.
-        :param var_noise_0: Valeur initiale pour la variance du bruit.
-        :param theta_lb, theta_ub: Bornes pour les hyperparamètres du noyau.
-        :param var_lb, var_ub: Bornes pour la variance du bruit.
+        :param X: Training inputs.
+        :param y: Training outputs.
+        :param multi_start: Enable multiple starting points.
+        :param n_start: Number of starting points if multi_start is enabled.
+        :param theta_0: Initial values for the kernel hyperparameters.
+        :param var_noise_0: Initial value for the noise variance.
+        :param theta_lb, theta_ub: Bounds for the kernel hyperparameters.
+        :param var_lb, var_ub: Bounds for the noise variance.
         :return: self
         """
-        # Formatage des entrées
+        # Input formatting
         if X.ndim == 1:
             self.X_train = X.reshape(-1, 1)
         else:
@@ -412,16 +412,16 @@ class P_so_GPRegression:
             
         self.y_train = y.reshape(-1, 1)
         
-        # Début du chronométrage
+        # Start timing
         start_time = time.time()
         
-        # Optimisation des hyperparamètres
+        # Hyperparameter optimization
         opt_result = self._optimize_hyperparameters(
             theta_0, var_noise_0, multi_start, n_start, 
             theta_lb, theta_ub, var_lb, var_ub
         )
         
-        # Mise à jour des hyperparamètres
+        # Update the hyperparameters
         if self.noisy_data:
             self.kernel.hyperparams = np.exp(opt_result.x[:-1])
             self.var_noise = opt_result.x[-1]
@@ -430,44 +430,44 @@ class P_so_GPRegression:
             self.kernel.hyperparams = np.exp(opt_result.x)
             self.hyperparameters = [np.exp(opt_result.x), self.sigma_k**2]
         
-        # Affichage du temps total d'ajustement
+        # Display total fitting time
         if self.verbose > 0:
-            print(f"Temps total d'ajustement: {time.time() - start_time:.2f}s")
+            print(f"Total fitting time: {time.time() - start_time:.2f}s")
         
         return self
     
     def predict(self, X_star, return_cov=False):
         """
-        Prédit les sorties pour de nouvelles entrées.
+        Predicts outputs for new inputs.
         
-        :param X_star: Nouvelles entrées.
-        :param return_cov: Si True, retourne la matrice de covariance complète, sinon retourne la variance.
-        :return: Moyenne et variance/covariance des prédictions.
+        :param X_star: New inputs.
+        :param return_cov: If True, returns the full covariance matrix, otherwise returns the variance.
+        :return: Predictive mean and variance/covariance.
         """
-        # Formatage des entrées
+        # Input formatting
         if X_star.ndim == 1:
             X_star = X_star.reshape(-1, 1)
             
-        # Calcul de la covariance entre les points d'entraînement et les nouveaux points
+        # Compute covariance between training points and new points
         K_star = self.kernel(self.X_train, X_star)
         
-        # Récupération des paramètres sauvegardés
+        # Retrieve saved parameters
         L = self.cholesky_K
         mean_hat = self.mean_p
         alpha_one_y = self.alpha_one_y
         
-        # Calcul de la moyenne prédictive
+        # Compute the predictive mean
         mean = mean_hat + np.dot(K_star.T, alpha_one_y)
         
-        # Calcul de la variance prédictive
+        # Compute the predictive variance
         v = solve_triangular(L, K_star, lower=True)
         K_star_star = self.kernel(X_star, X_star)
         
         if return_cov:
-            # Calcul de la matrice de covariance complète
+            # Compute the full covariance matrix
             y_cov = (K_star_star - np.dot(v.T, v)) * self.sigma_k**2
             return mean.ravel(), y_cov
         else:
-            # Calcul de la variance prédictive (diagonale de la covariance)
+            # Compute the predictive variance (covariance diagonal)
             y_var = np.maximum(0, np.diag(K_star_star - np.dot(v.T, v)) * self.sigma_k**2)
             return mean.ravel(), y_var

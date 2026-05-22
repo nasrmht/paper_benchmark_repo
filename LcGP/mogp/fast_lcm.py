@@ -7,7 +7,7 @@ from joblib import Parallel, delayed
 
 class FastLMCKernel:
     """
-    Gère la structure triangulaire inférieure (Cholesky) pour A.
+    Manages the lower triangular structure (Cholesky) for A.
     A = L (Lower Triangular)
     """
     def __init__(self, n_features, p_components, kernel_type='rbf'):
@@ -15,29 +15,29 @@ class FastLMCKernel:
         self.p = p_components
         self.kernel_type = kernel_type
         
-        # Nombre d'éléments dans la partie triangulaire inférieure (inclus diagonale)
+        # Number of elements in the lower triangular part (including the diagonal)
         self.n_L_params = (self.p * (self.p + 1)) // 2
 
     def get_parameter_bounds(self, X_min, X_max):
         """
-        Définit les bornes :
-        - Elements diagonaux de L : [1e-5, 10.0] (Positivité = Inversibilité)
-        - Elements hors-diagonale de L : [-10.0, 10.0]
-        - Log_Lengthscales : Logarithme des bornes physiques
+        Defines the bounds:
+        - Diagonal elements of L: [1e-5, 10.0] (Positivity = Invertibility)
+        - Off-diagonal elements of L: [-10.0, 10.0]
+        - Log_Lengthscales: Logarithm of physical bounds
         """
         bounds_L = []
         
-        # On parcourt la matrice L ligne par ligne
+        # Iterate through matrix L row by row
         for i in range(self.p):
             for j in range(i + 1):
                 if i == j:
-                    # Diagonale : Doit être strictement positive
+                    # Diagonal: Must be strictly positive
                     bounds_L.append((1e-5, 5.0))
                 else:
-                    # Hors-diagonale (Triangle inférieur)
+                    # Off-diagonal (Lower triangle)
                     bounds_L.append((-5.0, 5.0))
         
-        # Bornes pour les LOG-lengthscales
+        # Bounds for LOG-lengthscales
         ranges = X_max - X_min
         ranges[ranges == 0] = 1.0 
         
@@ -52,9 +52,9 @@ class FastLMCKernel:
 
     def unpack_params(self, theta):
         """
-        Reconstruit la matrice L (Triangulaire Inf) et les lengthscales.
+        Reconstructs the L matrix (Lower Triangular) and the lengthscales.
         """
-        # 1. Reconstruction de L
+        # 1. Reconstruction of L
         L_params = theta[:self.n_L_params]
         L = np.zeros((self.p, self.p))
         
@@ -64,26 +64,26 @@ class FastLMCKernel:
                 L[i, j] = L_params[idx]
                 idx += 1
                 
-        # 2. Extraction des lengthscales (Log -> Exp)
+        # 2. Extraction of lengthscales (Log -> Exp)
         log_ls_params = theta[self.n_L_params:]
         lengthscales = np.exp(log_ls_params).reshape(self.p, self.d)
         
         return L, lengthscales
 
 class FastLMCNll:
-    """Calcul de la NLL O(p) avec structure Triangulaire"""
+    """O(p) NLL computation with triangular structure"""
     def __init__(self, kernel, sparsity_lambda=0.0):
         self.kernel = kernel
         self.lam = sparsity_lambda
 
     def _compute_kernel_matrix(self, X, lengthscales_j):
-        # Mise à l'échelle des données
+        # Scaling of data
         X_scaled = X / lengthscales_j
         
-        # Calcul des distances au carré (vecteur condensé)
+        # Calculation of squared distances (condensed vector)
         dists_sq_vec = pdist(X_scaled, metric='sqeuclidean')
         
-        # Calcul du noyau (vecteur condensé)
+        # Calculation of kernel (condensed vector)
         if self.kernel.kernel_type == 'rbf':
             K_vec = np.exp(-0.5 * dists_sq_vec)
         elif self.kernel.kernel_type == 'matern32':
@@ -91,40 +91,40 @@ class FastLMCNll:
             sqrt3 = np.sqrt(3.0)
             K_vec = (1.0 + sqrt3 * d_vec) * np.exp(-sqrt3 * d_vec)
             
-        # Transformation en matrice carrée
+        # Transformation into a square matrix
         K_mat = squareform(K_vec)
         
-        # --- CORRECTION CRUCIALE ---
-        # squareform met 0 sur la diagonale par défaut. 
-        # Or, k(x, x) = 1. On doit remplir la diagonale.
+        # --- CRITICAL CORRECTION ---
+        # squareform sets 0 on the diagonal by default. 
+        # However, k(x, x) = 1. We must fill the diagonal.
         np.fill_diagonal(K_mat, 1.0)
         
         return K_mat
 
     def compute(self, theta, X, Y):
-        # 1. Déballage
-        # Pas besoin de try/except sur unpack, c'est déterministe
+        # 1. Unpacking
+        # No need for try/except on unpack, it is deterministic
         L, lengthscales = self.kernel.unpack_params(theta)
             
-        # 2. Inversion de L (Triangulaire)
-        # L est triangulaire inférieure. Son déterminant est le produit de la diagonale.
-        # Pour le log-det global, on a besoin de 2*n*log|det(L)|
+        # 2. Inversion of L (Triangular)
+        # L is lower triangular. Its determinant is the product of the diagonal.
+        # For the global log-det, we need 2*n*log|det(L)|
         diag_L = np.diag(L)
         
-        # Sécurité : si un élément diag est trop proche de 0 (malgré les bornes)
+        # Safety: if a diagonal element is too close to 0 (despite bounds)
         # if np.any(diag_L <= 1e-9): 
         #     return 1e15
             
         logdet_L = np.sum(np.log(diag_L))
         
         # W_hat = L^-1 * Y.T
-        # solve_triangular est O(p^2) vs O(p^3) pour inv standard
+        # solve_triangular is O(p^2) vs O(p^3) for standard inv
         #try:
         W_hat = spl.solve_triangular(L, Y.T, lower=True)
         # except np.linalg.LinAlgError:
         #     return 1e15
 
-        # 3. Somme sur les processus latents
+        # 3. Sum over latent processes
         log_det_Rs = 0
         quad_form_sum = 0
         n = X.shape[0]
@@ -153,7 +153,7 @@ class FastLMCNll:
         
         nll = 0.5 * (const + total_log_det + quad_form_sum)
         
-        # Sparsité sur L (Lasso)
+        # Sparsity on L (Lasso)
         if self.lam > 0:
             nll += self.lam * np.sum(np.abs(L))
             
@@ -165,7 +165,7 @@ class FastSparseLMC:
         self.kernel_type = kernel_type
         self.lam = sparsity_lambda
         self.n_restarts = n_restarts
-        self.use_init_heuristic = use_init_heuristic # Renommé pour généralité (c'était use_pca)
+        self.use_init_heuristic = use_init_heuristic # Renamed for generality (was use_pca)
         self.n_jobs = n_jobs
         self.seed = seed
         
@@ -173,7 +173,7 @@ class FastSparseLMC:
         self.best_params_ = None
         self.cached_inv_R_ = []
         self.cached_alpha_ = []
-        self.L_hat_ = None # On stocke L maintenant
+        self.L_hat_ = None # We store L now
         self.phis_hat_ = None
 
     def _initialize_hyperparams(self, n_starts, bounds):
@@ -181,39 +181,39 @@ class FastSparseLMC:
         lower_bounds = np.array([b[0] for b in bounds])
         upper_bounds = np.array([b[1] for b in bounds])
         
-        sampler = qmc.LatinHypercube(d=n_params, optimization="random-cd", rng=self.seed)
+        sampler = qmc.LatinHypercube(d=n_params, optimization="random-cd", seed=self.seed)
         sample = sampler.random(n=n_starts)
         initial_thetas = qmc.scale(sample, lower_bounds, upper_bounds)
         
-        # --- INITIALISATION INTELLIGENTE (CHOLESKY EMPIRIQUE) ---
+        # --- SMART INITIALIZATION (EMPIRICAL CHOLESKY) ---
         if self.use_init_heuristic and self.Y_train_ is not None:
             try:
-                # 1. Calcul de la covariance empirique des sorties Y
+                # 1. Computation of the empirical covariance of the outputs Y
                 # (p, p)
                 cov_emp = np.cov(self.Y_train_.T)
                 
-                # Jitter pour garantir que la cov empirique est définie positive
-                # (nécessaire si n < p ou données très corrélées)
+                # Jitter to guarantee that empirical covariance is positive definite
+                # (necessary if n < p or highly correlated data)
                 cov_emp += np.eye(self.p) * 1e-4
                 
-                # 2. Décomposition de Cholesky : Cov = L_init * L_init.T
-                # C'est exactement la structure que nous cherchons !
+                # 2. Cholesky decomposition: Cov = L_init * L_init.T
+                # This is exactly the structure we are looking for!
                 L_init = np.linalg.cholesky(cov_emp)
                 
-                # Clipping pour rester dans les bornes [-10, 10]
+                # Clipping to stay within bounds [-10, 10]
                 L_init = np.clip(L_init, -10.0, 10.0)
-                # Diagonale positive
+                # Positive diagonal
                 np.fill_diagonal(L_init, np.maximum(np.diag(L_init), 1e-4))
                 
-                # 3. Packing dans le vecteur theta
+                # 3. Packing into theta vector
                 L_flat = []
                 for i in range(self.p):
                     for j in range(i + 1):
                         L_flat.append(L_init[i, j])
                 L_flat = np.array(L_flat)
                 
-                # Appliquer à tous les starts (on garde la diversité des lengthscales)
-                # Les params de L sont au début du vecteur
+                # Apply to all starts (we keep the diversity of lengthscales)
+                # L parameters are at the beginning of the vector
                 n_L = len(L_flat)
                 for i in range(n_starts):
                     initial_thetas[i, :n_L] = L_flat
@@ -238,11 +238,11 @@ class FastSparseLMC:
         #     return None
 
     def fit(self, X, Y):
-        # Recommandation à l'utilisateur
+        # Recommendation to user
         if np.max(np.abs(Y)) > 100:
-            print("ATTENTION: Vos données Y ont une grande amplitude.")
-            print("Il est fortement recommandé de normaliser Y (StandardScaler) avant le fit")
-            print("car les bornes de la matrice L sont fixées à [-10, 10].")
+            print("WARNING: Your Y data has a large amplitude.")
+            print("It is highly recommended to normalize Y (StandardScaler) before fitting")
+            print("because the bounds of matrix L are fixed at [-10, 10].")
 
         self.X_train_ = X
         self.Y_train_ = Y
@@ -251,7 +251,7 @@ class FastSparseLMC:
         self.kernel = FastLMCKernel(n_features, self.p, self.kernel_type)
         self.nll_engine = FastLMCNll(self.kernel, self.lam)
         
-        # Bornes
+        # Bounds
         X_min = np.min(X, axis=0)
         X_max = np.max(X, axis=0)
         bounds_def = self.kernel.get_parameter_bounds(X_min, X_max)
@@ -273,7 +273,7 @@ class FastSparseLMC:
         self.best_params_ = best_res.x
         self.final_nll_ = best_res.fun
         
-        # --- MISE EN CACHE ---
+        # --- CACHING ---
         self.L_hat_, self.phis_hat_ = self.kernel.unpack_params(self.best_params_)
         
         # W_obs = L^-1 * Y.T
@@ -353,7 +353,7 @@ class FastSparseLMC:
                 var_j = np.maximum(k_diag - np.sum(v**2, axis=0), 1e-9)
                 W_vars[j, :] = var_j
         
-        # Projection : V = L * W
+        # Projection: V = L * W
         V_mean = (self.L_hat_ @ W_means).T
         
         if not return_cov:
@@ -365,8 +365,8 @@ class FastSparseLMC:
             Full_Cov = np.zeros((n_new * self.p, n_new * self.p))
             for j in range(self.p):
                 C_W = W_covs[j]
-                # Partie spatiale du latent j
-                # Produit Kronecker avec la structure de L pour ce latent
+                # Spatial part of latent j
+                # Kronecker product with the structure of L for this latent
                 l_j = self.L_hat_[:, j].reshape(-1, 1)
                 Full_Cov += np.kron(l_j @ l_j.T, C_W)
             return V_mean, Full_Cov

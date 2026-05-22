@@ -1,16 +1,17 @@
 import numpy as np
 from scipy import linalg
 import copy
+
 def compute_log_likelihood_naive(kernel_,params,X: np.ndarray, y: np.ndarray, log_noise_variance: float) -> float:
     """
-        Calcule la log-vraisemblance en utilisant la méthode naïve.
+        Computes the log-likelihood using the naive method.
         
         Args:
-            X: Matrice d'entrée préparée de forme (n * output_dim, input_dim + 1)
-            y: Vecteur de sortie préparé de forme (n * output_dim,)
+            X: Prepared input matrix of shape (n * output_dim, input_dim + 1)
+            y: Prepared output vector of shape (n * output_dim,)
             
         Returns:
-            La log-vraisemblance négative (pour la minimisation)
+            The negative log-likelihood (for minimization)
     """
     n_total = y.shape[0]
     kernel = copy.deepcopy(kernel_)
@@ -26,7 +27,7 @@ def compute_log_likelihood_naive(kernel_,params,X: np.ndarray, y: np.ndarray, lo
         log_likelihood = -0.5 * np.dot(y, alpha) - np.sum(np.log(np.diag(L))) - 0.5 * n_total * np.log(2 * np.pi)
         return -log_likelihood, L, alpha
     except np.linalg.LinAlgError:
-        return 1e10, L, alpha
+        return 1e10, None, None
 
 
 def compute_log_likelihood_gradient_naive(kernel_, params, X: np.ndarray, y: np.ndarray, log_noise_variance: float):

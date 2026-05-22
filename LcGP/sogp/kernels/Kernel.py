@@ -23,7 +23,7 @@ class RBFKernel:
         return K
     
     def grad_K(self, X1):
-        """ Calcul du gradient du noyau par rapport au paramètre length_scale """
+        """ Computation of the kernel gradient with respect to the length_scale parameter """
         # We need to recompute the pairwise dimension-wise distances
         K = self(X1)
         length_scale = self.hyperparams
@@ -41,11 +41,11 @@ class RBFKernel:
 class MaternKernel:
     def __init__(self, length_scale=1.0, nu=1.5):
         """
-        nu : paramètre de lissage (smoothness). 
-             Valeurs supportées : 0.5, 1.5 (par défaut), 2.5
+        nu: smoothness parameter.
+            Supported values: 0.5, 1.5 (default), 2.5
         """
         if nu not in [0.5, 1.5, 2.5]:
-            raise ValueError("nu doit être 0.5, 1.5 ou 2.5")
+            raise ValueError("nu must be 0.5, 1.5 or 2.5")
         
         self.length_scale = length_scale
         self.hyperparams = length_scale
@@ -54,16 +54,16 @@ class MaternKernel:
     def __call__(self, X1, X2=None):
         length_scale = self.hyperparams
         
-        # Calcul de la distance Euclidienne (non carrée pour Matérn)
-        # On divise par length_scale avant pour gérer l'anisotropie (ARD)
+        # Euclidean distance computation (non-squared for Matern)
+        # Divide by length_scale first to handle anisotropy (ARD)
         if X2 is None:
             dists = pdist(X1 / length_scale, metric="euclidean")
-            # Conversion vecteur -> matrice carrée
+            # Vector -> square matrix conversion
             dists = squareform(dists)
         else:
             dists = cdist(X1 / length_scale, X2 / length_scale, metric="euclidean")
         
-        # Application des formules selon nu
+        # Apply formulas depending on nu
         if self.nu == 0.5:
             K = np.exp(-dists)
             
@@ -73,11 +73,11 @@ class MaternKernel:
             
         elif self.nu == 2.5:
             sqrt_5 = np.sqrt(5)
-            # Formule: (1 + sqrt(5)*d + 5/3 * d^2) * exp(-sqrt(5)*d)
+            # Formula: (1 + sqrt(5)*d + 5/3 * d^2) * exp(-sqrt(5)*d)
             K = (1 + sqrt_5 * dists + (5.0 / 3.0) * dists**2) * np.exp(-sqrt_5 * dists)
             
-        # Sur la diagonale, la distance est 0, donc K=1. 
-        # C'est implicite avec les formules, mais on peut forcer pour la précision num.
+        # On the diagonal, the distance is 0, so K=1. 
+        # This is implicit in the formulas, but we can force it for numerical precision.
         if X2 is None:
             np.fill_diagonal(K, 1)
             
@@ -85,29 +85,29 @@ class MaternKernel:
     
     def grad_K(self, X1):
         """ 
-        Calcul du gradient du noyau par rapport au paramètre length_scale.
-        Note: Comme dans votre RBF, cela correspond au gradient w.r.t log(length_scale).
+        Computation of the kernel gradient with respect to the length_scale parameter.
+        Note: As in RBF, this corresponds to the gradient w.r.t log(length_scale).
         """
         length_scale = self.hyperparams
         
-        # 1. Recalcul des distances Euclidiennes (D)
+        # 1. Recompute Euclidean distances (D)
         dists = pdist(X1 / length_scale, metric="euclidean")
         dists = squareform(dists)
         
-        # 2. Préparation du tenseur "différences au carré normalisées"
-        # C'est le terme (x_i - x_j)^2 / l^2
-        # Shape : (n_samples, n_samples, n_dims)
+        # 2. Prepare the "normalized squared differences" tensor
+        # This is the term (x_i - x_j)^2 / l^2
+        # Shape: (n_samples, n_samples, n_dims)
         diff_sq_normalized = (X1[:, np.newaxis, :] - X1[np.newaxis, :, :]) ** 2 / (
             length_scale**2
         )
         
-        # 3. Calcul du facteur multiplicatif selon nu
-        # Le gradient s'écrit souvent : K_grad = prefactor * diff_sq_normalized
+        # 3. Compute the multiplicative factor depending on nu
+        # The gradient is often written as: K_grad = prefactor * diff_sq_normalized
         
         if self.nu == 0.5:
-            # Attention à la division par zéro sur la diagonale
+            # Watch out for division by zero on the diagonal
             # Grad = exp(-D) * (1/D) * diff_sq_normalized
-            # On utilise un masque pour éviter le warning, la diagonale sera 0 de toute façon
+            # We use a mask to avoid warnings, the diagonal will be 0 anyway
             with np.errstate(divide='ignore', invalid='ignore'):
                 prefactor = np.exp(-dists) / dists
             prefactor[dists == 0] = 0  # Fix diag
@@ -121,11 +121,11 @@ class MaternKernel:
             # Grad = 5/3 * (1 + sqrt(5)*D) * exp(-sqrt(5)*D) * diff_sq_normalized
             sqrt_5 = np.sqrt(5)
             prefactor = (5.0 / 3.0) * (1 + sqrt_5 * dists) * np.exp(-sqrt_5 * dists)
-
-        # Broadcasting du préfacteur scalaire (N, N) sur le tenseur (N, N, D)
+            
+        # Broadcasting of the scalar prefactor (N, N) over the tensor (N, N, D)
         K_gradient = diff_sq_normalized * prefactor[..., np.newaxis]
 
-        # Gestion du cas scalaire vs vecteur (comme dans votre RBF)
+        # Handle scalar vs vector case (as in RBF)
         if hasattr(length_scale, 'shape') and length_scale.shape[0] == 1:
             K_gradient = K_gradient[:, :, 0]
             K_gradient = K_gradient[..., np.newaxis]

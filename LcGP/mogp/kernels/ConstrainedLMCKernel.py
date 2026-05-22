@@ -4,69 +4,69 @@ from .Kernel import Kernel
 
 class LMCKernelConstrained:
     """
-    Implémentation du noyau du modèle de corégionalisation linéaire (LMC) avec contrainte.
+    Implementation of the Linear Coregionalization Model (LMC) kernel with constraint.
     
-    Le noyau est défini comme une somme de produits de Kronecker:
+    The kernel is defined as a sum of Kronecker products:
     K(x, x') = sum_{q=1}^Q B_q ⊗ k_q(x, x')
 
-    où B_q = L_q @ L_q.T (sigma_B est fixé à 1, non estimé), et L_q est contraint tel que u.T @ L_q = 0.
-    Le premier élément de chaque colonne de L_q est fixé comme:
+    where B_q = L_q @ L_q.T (sigma_B is fixed to 1, not estimated), and L_q is constrained such that u.T @ L_q = 0.
+    The first element of each column of L_q is set as:
     L_q[0, j] = -sum(u[1:] * L_q[1:, j]) / u[0]
 
-    Cette contrainte garantit que le produit scalaire entre u et les sorties est nul.
+    This constraint guarantees that the dot product between u and the outputs is zero.
     """
     
     def __init__(self, base_kernels: List[Kernel], output_dim: int, u_vector: np.ndarray = None, 
                  rank: Optional[List[int]] = None, seed: int = 43):
         """
-        Initialise le noyau LMC avec contrainte.
+        Initializes the constrained LMC kernel.
         
         Args:
-            base_kernels: Liste des noyaux de base k_q(x, x')
-            output_dim: Nombre de sorties (dimension D)
-            u_vector: Vecteur de contrainte u de taille output_dim. Si None, un vecteur unitaire sera utilisé.
-            rank: Liste des rangs pour chaque matrice de corégionalisation B_q
-                 Si None, toutes les matrices seront de rang complet
-            seed: Seed pour la génération aléatoire
+            base_kernels: List of base kernels k_q(x, x')
+            output_dim: Number of outputs (dimension D)
+            u_vector: Constraint vector u of size output_dim. If None, a unit vector will be used.
+            rank: List of ranks for each coregionalization matrix B_q
+                 If None, all matrices will be of full rank
+            seed: Seed for random generation
         """
         self.base_kernels = base_kernels
         self.output_dim = output_dim
         self.start_idx_Lq = 0
         
-        # Définir le vecteur de contrainte u
+        # Define the constraint vector u
         if u_vector is None:
-            # Par défaut, utiliser un vecteur unitaire [1, 0, 0, ...]
+            # By default, use a unit vector [1, 0, 0, ...]
             self.u_vector = np.zeros(output_dim)
             self.u_vector[0] = 1.0
         else:
             if len(u_vector) != output_dim:
-                raise ValueError(f"Le vecteur u doit avoir une longueur de {output_dim}")
+                raise ValueError(f"The vector u must have a length of {output_dim}")
             if u_vector[0] == 0:
-                raise ValueError("Le premier élément du vecteur u ne peut pas être zéro")
-            self.u_vector = np.array(u_vector) / np.linalg.norm(u_vector)  # Normaliser u
+                raise ValueError("The first element of the vector u cannot be zero")
+            self.u_vector = np.array(u_vector) / np.linalg.norm(u_vector)  # Normalize u
         
-        # Si le rang n'est pas spécifié, utiliser un rang complet (=output_dim)
+        # If rank is not specified, use full rank (=output_dim)
         if rank is None:
             self.rank = [output_dim] * len(base_kernels)
         else:
             if len(rank) != len(base_kernels):
-                raise ValueError("Le nombre de rangs doit correspondre au nombre de noyaux de base")
+                raise ValueError("The number of ranks must match the number of base kernels")
             self.rank = rank
         
-        # Initialiser les matrices L_q (sans les premières lignes qui seront calculées)
+        # Initialize the L_q matrices (without the first rows which will be computed)
         self.Lq_params = []
 
         self._bounds = []
         np.random.seed(seed)
         start_idx = 0
         
-        # Note: Si output_dim <= 1, pas de contrainte possible au sens strict (ou trivial u*L=0 => L=0)
-        # Mais le code original gérait output_dim > 2 spécifiquement.
-        # Pour output_dim=2, le code original utilise une logique spécifique.
+        # Note: If output_dim <= 1, no constraint is possible in the strict sense (or trivial u*L=0 => L=0)
+        # But the original code handled output_dim > 2 specifically.
+        # For output_dim=2, the original code uses a specific logic.
         
         for q, r in enumerate(self.rank):
-            # Pour chaque matrice L_q de taille output_dim x r, 
-            # on paramétrise tous les éléments sauf la première ligne L_q[0, :]
+            # For each L_q matrix of size output_dim x r, 
+            # we parameterize all elements except the first row L_q[0, :]
             
             if self.output_dim > 2:
                 n_params = (self.output_dim - 1) * r
@@ -79,15 +79,15 @@ class LMCKernelConstrained:
 
         self.start_idx_Lq = start_idx
 
-        # Ajouter les bornes pour les facteurs d'échelle sigma_B (positifs)
+        # Add bounds for the scale factors sigma_B (positive)
         #self._bounds.extend([(1.0, 10.0)] * len(self.rank))
-        # Ajouter les bornes pour les paramètres des noyaux de base
+        # Add bounds for the base kernel parameters
         for kernel in self.base_kernels:
             self._bounds.extend(kernel.bounds)
     
     @property
     def params(self) -> np.ndarray:
-        """Retourne tous les hyperparamètres du noyau LMC."""
+        """Returns all hyperparameters of the LMC kernel."""
         parts = list(self.Lq_params) if self.output_dim > 2 else []
         for kernel in self.base_kernels:
             parts.append(kernel.params)
@@ -95,7 +95,7 @@ class LMCKernelConstrained:
     
     @params.setter
     def params(self, params: np.ndarray):
-        """Définit tous les hyperparamètres du noyau LMC."""
+        """Sets all hyperparameters of the LMC kernel."""
         start_idx = 0
         if self.output_dim > 2:
             for q, r in enumerate(self.rank):
@@ -109,13 +109,13 @@ class LMCKernelConstrained:
     
     @property
     def bounds(self) -> List[Tuple[float, float]]:
-        """Retourne les bornes de tous les hyperparamètres."""
+        """Returns the bounds of all hyperparameters."""
         return self._bounds
     
     def _reconstruct_Lq(self, q: int) -> np.ndarray:
         """
-        Reconstruit la matrice L_q complète en calculant la première ligne
-        selon la contrainte u.T @ L_q = 0 pour chaque colonne j.
+        Reconstructs the complete L_q matrix by computing the first row
+        according to the constraint u.T @ L_q = 0 for each column j.
         """
         r = self.rank[q]
         output_dim = self.output_dim
@@ -138,20 +138,20 @@ class LMCKernelConstrained:
         return L_q
     
     def get_B(self, q: int) -> np.ndarray:
-        """Retourne la matrice de corégionalisation B_q = L_q @ L_q.T."""
+        """Returns the coregionalization matrix B_q = L_q @ L_q.T."""
         L_q = self._reconstruct_Lq(q)
         return L_q @ L_q.T
     
     def get_L(self, q: int) -> np.ndarray:
-        """Retourne la matrice L_q complète."""
+        """Returns the complete L_q matrix."""
         return self._reconstruct_Lq(q)
     
     def get_sigma_B(self, q: int) -> float:
-        """Fixé à 1.0 (non estimé)."""
+        """Fixed to 1.0 (not estimated)."""
         return 1.0
     
     def verify_constraint(self, q: int, tol: float = 1e-10) -> bool:
-        """Vérifie que la contrainte u.T @ L_q = 0 est satisfaite."""
+        """Verifies that the constraint u.T @ L_q = 0 is satisfied."""
         L_q = self._reconstruct_Lq(q)
         dot_products = self.u_vector @ L_q
         return np.all(np.abs(dot_products) < tol)
@@ -204,7 +204,7 @@ class LMCKernelConstrained:
             for q in range(len(self.base_kernels)):
                 K_spatial = self.base_kernels[q](x1, x2)
                 L_q = self._reconstruct_Lq(q)
-
+ 
                 for i in range(1, self.output_dim):  # Skip row 0 (constrained)
                     for j in range(self.rank[q]):
                         dB_q = self._compute_dB_q_dL(q, i, j, L_q)
@@ -227,7 +227,7 @@ class LMCKernelConstrained:
                 param_idx += 1
                 
         return gradients
-
+ 
     def _compute_dB_q_dL(self, q: int, i: int, j: int, L_q: np.ndarray) -> np.ndarray:
         """dB_q / dL_q[i, j], accounting for the constrained row L_q[0, j]."""
         dL_q = np.zeros_like(L_q)
@@ -235,16 +235,16 @@ class LMCKernelConstrained:
         # Derivative of constrained row: d(L_q[0,j])/d(L_q[i,j]) = -u[i]/u[0]
         dL_q[0, j] = -(self.u_vector[i]) / self.u_vector[0]
         return dL_q @ L_q.T + L_q @ dL_q.T
-
+ 
     def _compute_dB(self):
         """
-        Calcule la dérivée de B par rapport à tous les paramètres de B (utile en ICM)
+        Computes the derivative of B with respect to all parameters of B (useful in ICM).
         
         Args:
             
             
         Returns:
-            Liste des Matrice dB_q de forme (output_dim, output_dim)
+            List of dB_q matrices of shape (output_dim, output_dim)
         """
         dB = []
         if self.output_dim > 2:
@@ -254,37 +254,37 @@ class LMCKernelConstrained:
                     for j in range(self.rank[q]):
                         dB.append(self._compute_dB_q_dL(q, i, j, L_q))
         
-        # # On ajoute la dérivée de B par rapport à sigma_B est simplement B_unit = L_q @ L_q.T
+        # # The derivative of B with respect to sigma_B is simply B_unit = L_q @ L_q.T
         # for q in range(len(self.base_kernels)):
         #     dB_q = self._compute_dB_q_dsigma(q)
         #     dB.append(dB_q)
         
         return dB
-
-
+ 
+ 
     def _compute_dB_q_dsigma(self, q: int) -> np.ndarray:
         L_q = self._reconstruct_Lq(q)
         return L_q @ L_q.T
-
+ 
     def init_L_from_pca(self, Y: np.ndarray):
         """
-        Initialise L_q à partir de la PCA des données Y (n x p),
-        en respectant la contrainte u^T L = 0
+        Initializes L_q from the PCA of the data Y (n x p),
+        respecting the constraint u^T L = 0.
         """
         # If output_dim <= 2, we don't have free params for L.
         if self.output_dim <= 2:
             return 
-
+ 
         Yc = Y - Y.mean(axis=0)
         U, S, Vt = np.linalg.svd(Yc, full_matrices=False)
-
+ 
         for q, r in enumerate(self.rank):
             L_pca = Vt.T[:, :r] * np.sqrt(S[:r])
-
-            # Projection pour respecter la contrainte
+ 
+            # Projection to respect the constraint
             u = self.u_vector / np.linalg.norm(self.u_vector)
             P = np.eye(self.output_dim) - np.outer(u, u)
             L_proj = P @ L_pca
-
-            # On ne garde que les lignes libres (1:)
+ 
+            # Keep only the free rows (1:)
             self.Lq_params[q] = L_proj[1:, :].flatten()

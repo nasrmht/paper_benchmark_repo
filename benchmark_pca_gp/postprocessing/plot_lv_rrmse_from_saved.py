@@ -170,7 +170,7 @@ def _style_ax(ax, fs: dict, xlabel: str = r"Latent dimension $m$",
         ax.set_xlim(xlim)
     ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
     ax.tick_params(labelsize=fs["tick"])
-    for lbl in ax.get_xticklabels() + ax.get_yticklabels():
+    for lbl in ax.get_xticklabels(which='both') + ax.get_yticklabels(which='both'):
         lbl.set_fontweight("bold")
     ax.grid(axis="y", linestyle=":", alpha=0.4)
     ax.set_axisbelow(True)
@@ -327,19 +327,19 @@ def plot_rrmse(
 
         if prefix == "RC":
             color, ls, lw, ms, alpha, zo = C_RC, LS_RC, LW_RC, MS_RC, A_RC, Z_RC
-            label  = "RC"
+            label  = "Row-CMO"
             marker = M_RC
         elif prefix == "CI":
             color, ls, lw, ms, alpha, zo = C_CI[k], LS_CI, LW_CI, MS_CI, A_CI, Z_CI
-            label  = f"CI (l={k})"
+            label  = f"Col-Indep (l={k})"
             marker = M_CI
         elif prefix == "FI":
             color, ls, lw, ms, alpha, zo = C_FI[k], LS_FI, LW_FI, MS_FI, A_FI, Z_FI
-            label  = f"FI (l={k})"
+            label  = f"Fw-Indep (l={k})"
             marker = M_FI
         else:  # FM
             color, ls, lw, ms, alpha, zo = C_FM[k], LS_FM, LW_FM, MS_FM, A_FM, Z_FM
-            label  = f"FM (l={k})"
+            label  = f"Fw-LCM (l={k})"
             marker = M_FM
 
         # Boost visibility in zoom view
@@ -391,16 +391,16 @@ def _add_grouped_legend(
     def _handle(prefix: str, k: int) -> mlines.Line2D:
         if prefix == "RC":
             color, ls, lw, ms, marker, label = \
-                C_RC, LS_RC, LW_RC, MS_RC, M_RC, "RC"
+                C_RC, LS_RC, LW_RC, MS_RC, M_RC, "Row-CMO"
         elif prefix == "CI":
             color, ls, lw, ms, marker, label = \
-                C_CI[k], LS_CI, LW_CI, MS_CI, M_CI, f"CI (l={k})"
+                C_CI[k], LS_CI, LW_CI, MS_CI, M_CI, f"Col-Indep (l={k})"
         elif prefix == "FI":
             color, ls, lw, ms, marker, label = \
-                C_FI[k], LS_FI, LW_FI, MS_FI, M_FI, f"FI (l={k})"
+                C_FI[k], LS_FI, LW_FI, MS_FI, M_FI, f"Fw-Indep (l={k})"
         else:  # FM
             color, ls, lw, ms, marker, label = \
-                C_FM[k], LS_FM, LW_FM, MS_FM, M_FM, f"FM (l={k})"
+                C_FM[k], LS_FM, LW_FM, MS_FM, M_FM, f"Fw-LCM (l={k})"
         return mlines.Line2D([], [], color=color, marker=marker,
                              markersize=ms, linewidth=lw,
                              linestyle=ls, label=label)
@@ -410,19 +410,26 @@ def _add_grouped_legend(
     fm_v = _get_variants("FM", variant_filter)
 
     groups = [
-        ([_handle("RC", -1)],           ["RC"],                              1),
-        ([_handle("CI", k) for k in ci_v], [f"CI (l={k})" for k in ci_v],
+        ([_handle("RC", -1)],           ["Row-CMO"],                              1),
+        ([_handle("CI", k) for k in ci_v], [f"Col-Indep (l={k})" for k in ci_v],
          min(2, max(1, len(ci_v)))),
-        ([_handle("FI", k) for k in fi_v], [f"FI (l={k})" for k in fi_v],
+        ([_handle("FI", k) for k in fi_v], [f"Fw-Indep (l={k})" for k in fi_v],
          min(2, max(1, len(fi_v)))),
-        ([_handle("FM", k) for k in fm_v], [f"FM (l={k})" for k in fm_v],
+        ([_handle("FM", k) for k in fm_v], [f"Fw-LCM (l={k})" for k in fm_v],
          min(2, max(1, len(fm_v)))),
     ]
     active = [(hdl, lbl, nc) for hdl, lbl, nc in groups if hdl]
     if not active:
         return
 
-    x_positions = np.linspace(0.10, 0.90, len(active))
+    if len(active) == 4:
+        x_positions = [0.13, 0.31, 0.56, 0.81]
+    elif len(active) == 3:
+        x_positions = [0.32, 0.50, 0.68]
+    elif len(active) == 2:
+        x_positions = [0.40, 0.60]
+    else:
+        x_positions = [0.50]
 
     common = dict(
         frameon=True, framealpha=0.95, edgecolor="#ccc",
@@ -469,6 +476,7 @@ def make_single_field_figure(
     fs: dict,
     save: bool = True,
     variant_filter: Optional[dict] = None,
+    figsize: Optional[Tuple[float, float]] = None,
 ) -> plt.Figure:
     """Combined poster figure: dominance + full-range RRMSE + zoom RRMSE.
 
@@ -479,11 +487,14 @@ def make_single_field_figure(
     """
     K     = len(n_labels)
     ncols = 1 + K
-    fig   = plt.figure(figsize=(5 * ncols, 6))
+    if figsize is None:
+        figsize = (5 * ncols, 6)
+    fig   = plt.figure(figsize=figsize)
     fig.patch.set_facecolor("white")
     gs    = GridSpec(2, ncols, figure=fig,
                      width_ratios=[1.05] + [1] * K,
-                     hspace=0.35, wspace=0.30)
+                     height_ratios=[1, 1],
+                     hspace=0.35, wspace=0.45)
 
     ax_dom = fig.add_subplot(gs[:, 0])     # spans both rows
     plot_dominance(ax_dom, agg_by_n, fs, n_labels)
@@ -506,8 +517,13 @@ def make_single_field_figure(
     for ax_f, ax_z in zip(axes_full, axes_zoom):
         _add_zoom_connectors(ax_f, ax_z)
 
-    _add_grouped_legend(fig, fs, variant_filter, y_anchor=-0.08)
+    _add_grouped_legend(fig, fs, variant_filter, y_anchor=-0.14)
     fig.tight_layout(rect=[0, 0.08, 1, 1.0])
+    
+    for ax_ in fig.axes:
+        for lbl in ax_.get_xticklabels(which='both') + ax_.get_yticklabels(which='both'):
+            lbl.set_fontweight("bold")
+            lbl.set_fontsize(fs["tick"])
 
     if save:
         for ext in ["pdf", "png", "svg"]:
@@ -527,15 +543,18 @@ def make_single_field_figure_nozoom(
     fs: dict,
     save: bool = True,
     variant_filter: Optional[dict] = None,
+    figsize: Optional[Tuple[float, float]] = None,
 ) -> plt.Figure:
     """Poster figure (no zoom row): dominance + full-range RRMSE columns."""
     K     = len(n_labels)
     ncols = 1 + K
-    fig   = plt.figure(figsize=(5 * ncols, 4.5))
+    if figsize is None:
+        figsize = (5 * ncols, 4.5)
+    fig   = plt.figure(figsize=figsize)
     fig.patch.set_facecolor("white")
     gs    = GridSpec(1, ncols, figure=fig,
                      width_ratios=[1.05] + [1] * K,
-                     wspace=0.30)
+                     wspace=0.45)
 
     ax_dom = fig.add_subplot(gs[0, 0])
     plot_dominance(ax_dom, agg_by_n, fs, n_labels)
@@ -547,8 +566,13 @@ def make_single_field_figure_nozoom(
                    show_ylabel=(j == 0), variant_filter=variant_filter,
                    title=f"Output: {fname_field}  —  {n_label}")
 
-    _add_grouped_legend(fig, fs, variant_filter, y_anchor=-0.12)
+    _add_grouped_legend(fig, fs, variant_filter, y_anchor=-0.20)
     fig.tight_layout(rect=[0, 0.15, 1, 1.0])
+    
+    for ax_ in fig.axes:
+        for lbl in ax_.get_xticklabels(which='both') + ax_.get_yticklabels(which='both'):
+            lbl.set_fontweight("bold")
+            lbl.set_fontsize(fs["tick"])
 
     if save:
         for ext in ["pdf", "png", "svg"]:
@@ -568,15 +592,18 @@ def make_single_field_figure_zoom_only(
     fs: dict,
     save: bool = True,
     variant_filter: Optional[dict] = None,
+    figsize: Optional[Tuple[float, float]] = None,
 ) -> plt.Figure:
     """Paper figure: zoomed RRMSE panels only (m=5..10), one per N label.
 
     No dominance panel — intended for direct inclusion in a paper.
     """
     K   = len(n_labels)
-    fig = plt.figure(figsize=(5 * K, 4.5))
+    if figsize is None:
+        figsize = (5 * K, 4.5)
+    fig = plt.figure(figsize=figsize)
     fig.patch.set_facecolor("white")
-    gs  = GridSpec(1, K, figure=fig, wspace=0.25)
+    gs  = GridSpec(1, K, figure=fig, wspace=0.40)
 
     fname_field = OUTPUT_NAMES[field_i]
     for j, n_label in enumerate(n_labels):
@@ -586,8 +613,13 @@ def make_single_field_figure_zoom_only(
                    variant_filter=variant_filter,
                    title=f"Output: {fname_field}  —  {n_label}")
 
-    _add_grouped_legend(fig, fs, variant_filter, y_anchor=-0.12)
+    _add_grouped_legend(fig, fs, variant_filter, y_anchor=-0.20)
     fig.tight_layout(rect=[0, 0.15, 1, 1.0])
+    
+    for ax_ in fig.axes:
+        for lbl in ax_.get_xticklabels(which='both') + ax_.get_yticklabels(which='both'):
+            lbl.set_fontweight("bold")
+            lbl.set_fontsize(fs["tick"])
 
     if save:
         for ext in ["pdf", "png", "svg"]:
@@ -908,8 +940,8 @@ def _bar_x_layout(bw: dict) -> List[Tuple[str, int, str, float, str]]:
             layout.append((prefix, k, lbl, cursor, group_label))
         cursor += _BAR_W + _GAP_OUTER
 
-    _add_group("RC", [-1], "RC")
-    for prefix, group_label in [("CI", "CI"), ("FI", "FI"), ("FM", "FM")]:
+    _add_group("RC", [-1], "Row-CMO")
+    for prefix, group_label in [("CI", "Col-Indep"), ("FI", "Fw-Indep"), ("FM", "Fw-LCM")]:
         if prefix in bw:
             best, worst = bw[prefix]
             ks = [best] if best == worst else [best, worst]
@@ -988,6 +1020,7 @@ def make_pca_gp_decomposition_figure(
     m_list:              Optional[List[int]] = None,
     best_worst_override: Optional[dict]      = None,
     save:                bool                = True,
+    figsize:             Optional[Tuple[float, float]] = None,
 ) -> plt.Figure:
     """PCA-reconstruction vs full (PCA + GP) RRMSE stacked bar figure.
 
@@ -1020,9 +1053,11 @@ def make_pca_gp_decomposition_figure(
 
     n_rows = len(n_labels)
     n_cols = len(m_list)
+    if figsize is None:
+        figsize = (max(4, 1.6 * len(layout)) * n_cols, 3.8 * n_rows)
     fig, axes = plt.subplots(
         n_rows, n_cols,
-        figsize=(max(4, 1.6 * len(layout)) * n_cols, 3.8 * n_rows),
+        figsize=figsize,
         sharey="row",
         squeeze=False,
     )
@@ -1055,7 +1090,7 @@ def make_pca_gp_decomposition_figure(
             ax.set_xticklabels(tick_lbls, fontsize=fs["tick"] * 0.85,
                                 fontweight="bold", rotation=0)
             ax.tick_params(labelsize=fs["tick"])
-            for lbl in ax.get_yticklabels():
+            for lbl in ax.get_yticklabels(which='both'):
                 lbl.set_fontweight("bold")
             ax.grid(axis="y", linestyle=":", alpha=0.4)
             ax.set_axisbelow(True)
@@ -1083,7 +1118,7 @@ def make_pca_gp_decomposition_figure(
     # ── Legend ────────────────────────────────────────────────────────────────
     # Method colour patches
     legend_handles = []
-    for prefix, group_label in [("RC","RC"), ("CI","CI"), ("FI","FI"), ("FM","FM")]:
+    for prefix, group_label in [("RC","Row-CMO"), ("CI","Col-Indep"), ("FI","Fw-Indep"), ("FM","Fw-LCM")]:
         if group_label not in groups:
             continue
         if prefix == "RC":
@@ -1266,31 +1301,44 @@ def main():
     # variant_filter = {"CI": [0, 2], "FI": [0, 2], "FM": [0, 2]}
     variant_filter = None
 
+    # ── Paramètres d'apparence globaux ───────────────────────────────────────
+    # Taille globale des figures (largeur, hauteur) en pouces
+    GLOBAL_FIGSIZE = (18, 6)
+    
+    # Taille pour la figure de décomposition (si None, auto-calculée)
+    DECOMP_FIGSIZE = (18, 6)
+
+    # Échelle de la taille de police (plus grand = polices plus grosses)
+    FONT_SCALE = 1.6
+
+    # Force les labels d'axes (qui sont en texte mathématique pour les échelles log) à hériter du style normal (permettant le gras manuel)
+    plt.rcParams["mathtext.default"] = "regular"
+    # Utilise la police 'cm' (Computer Modern) pour les maths afin d'avoir le caractère \mathcal{E} en gras sans erreur
+    plt.rcParams["mathtext.fontset"] = "cm"
+    # ─────────────────────────────────────────────────────────────────────────
+
     # ── m values to show in the decomposition figure ─────────────────────────
     # e.g. [2, 5, 8] or [2, 4, 6, 8]
     decomp_m_list = [2, 5, 8]
 
-    # ── Load ─────────────────────────────────────────────────────────────────
-    agg_by_n, data, n_labels = load_all_data(zarr_specs)
-    fs = _poster_fs(scale=1.0)
-
-    # ── Constraint vector ────────────────────────────────────────────────────
-    # LotkaVolterra: u=[1,1,1,1].  For CFD pass e.g. np.array([1,1,-4/3]).
-    u = _LV_U
-
-    print("\nLoading reconstruction RRMSE data …")
-    data_recon, _ = load_recon_data(zarr_specs, u=u, max_workers=4)
-
-    # Sauvegarde des données pour un tracé rapide ultérieur
+    # ── Load from saved data ──────────────────────────────────────────────────
     import pickle
-    with open("plot_lv_rrmse_data.pkl", "wb") as f:
-        pickle.dump({
-            "agg_by_n": agg_by_n,
-            "data": data,
-            "n_labels": n_labels,
-            "data_recon": data_recon
-        }, f)
-    print("\nData saved to 'plot_lv_rrmse_data.pkl'.")
+    import sys
+    try:
+        with open("plot_lv_rrmse_data.pkl", "rb") as f:
+            saved_data = pickle.load(f)
+        agg_by_n = saved_data["agg_by_n"]
+        data = saved_data["data"]
+        n_labels = saved_data["n_labels"]
+        data_recon = saved_data["data_recon"]
+        print("\nData loaded successfully from 'plot_lv_rrmse_data.pkl'.")
+    except FileNotFoundError:
+        print("Error: 'plot_lv_rrmse_data.pkl' not found.")
+        print("Please run 'plot_lv_rrmse.py' first to generate the data.")
+        sys.exit(1)
+
+    fs = _poster_fs(scale=FONT_SCALE)
+    u = _LV_U
 
     # ── Diagnostic table (always printed; helps verify recon data is present) ─
     print_decomp_table(data_recon, n_labels, m_list=decomp_m_list)
@@ -1302,26 +1350,26 @@ def main():
         # Combined: dominance + full-range + zoom
         fig = make_single_field_figure(
             agg_by_n, data, n_labels, i, fs,
-            save=True, variant_filter=variant_filter)
+            save=True, variant_filter=variant_filter, figsize=GLOBAL_FIGSIZE)
         plt.close(fig)
 
         # Full-range only (no zoom row)
         fig_nozoom = make_single_field_figure_nozoom(
             agg_by_n, data, n_labels, i, fs,
-            save=True, variant_filter=variant_filter)
+            save=True, variant_filter=variant_filter, figsize=GLOBAL_FIGSIZE)
         plt.close(fig_nozoom)
 
         # Zoom only (paper version, no dominance panel)
         fig_zoom = make_single_field_figure_zoom_only(
             agg_by_n, data, n_labels, i, fs,
-            save=True, variant_filter=variant_filter)
+            save=True, variant_filter=variant_filter, figsize=GLOBAL_FIGSIZE)
         plt.close(fig_zoom)
 
         # PCA-recon vs PCA+GP decomposition (stacked bar)
         fig_decomp = make_pca_gp_decomposition_figure(
             data_recon, n_labels, i, fs,
             m_list=decomp_m_list,
-            save=True)
+            save=True, figsize=DECOMP_FIGSIZE)
         plt.close(fig_decomp)
 
     print(f"\n✓ All {Q} fields done — 4 figure variants per field.")

@@ -63,21 +63,21 @@ METHOD_LABELS  = ['CMoGP', 'Indep. GP', 'LCM']
 COLORS         = {'mogp': '#2E86AB', 'indep': '#F18F01', 'lcm': '#A23B72'}
 METHOD_COLORS  = [COLORS['mogp'], COLORS['indep'], COLORS['lcm']]
 
-OUTPUT_NAMES   = ['RRMSE $(\hat{f}_1)$', 'RRMSE $(\hat{f}_2)$', 'RRMSE $(\hat{f}_3)$']
+OUTPUT_NAMES   = [r'RMSE $(\hat{f}_1)$', r'RMSE $(\hat{f}_2)$', r'RMSE $(\hat{f}_3)$']
 OUTPUT_SHORT   = ['f1', 'f2', 'f3']
 OUTPUT_COLORS  = ['#4E79A7', '#E15759', '#59A14F']   # blue / red / green
 
 SCENARIOS      = ['deduced_f1', 'deduced_f2', 'deduced_f3']
-SCENARIO_LABELS = ['k_*=1', 'k_*=2', 'k_*=3']
+SCENARIO_LABELS = ['l=1', 'l=2', 'l=3']
 
 plt.rcParams.update({
-    'font.size': 11,
-    'axes.titlesize': 13,
-    'axes.labelsize': 11,
-    'xtick.labelsize': 10,
-    'ytick.labelsize': 10,
-    'legend.fontsize': 10,
-    'figure.titlesize': 14,
+    'font.size': 16,
+    'axes.titlesize': 16,
+    'axes.labelsize': 16,
+    'xtick.labelsize': 16,
+    'ytick.labelsize': 16,
+    'legend.fontsize': 16,
+    'figure.titlesize': 16,
 })
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -384,22 +384,22 @@ def plot_stacked_bars(rank_data: dict, n: int, out_dir: str):
             # ax.bar(bx, p3s, bw, bottom=p1s + p2s, color=color, alpha=alphas[2],
             #        edgecolor='white', linewidth=0.5)
 
-            # Annotate % rank-1 inside the bottom bar
-            for xi, v in zip(bx, p1s):
-                if v >= 8:
-                    ax.text(xi, v / 2, f'{v:.0f}', ha='center', va='center',
-                            fontsize=8.5, fontweight='bold', color='white')
+            # # Annotate % rank-1 inside the bottom bar
+            # for xi, v in zip(bx, p1s):
+            #     if v >= 8:
+            #         ax.text(xi, v / 2, f'{v:.0f}', ha='center', va='center',
+            #                 fontsize=8.5, fontweight='bold', color='white')
 
-        ax.set_title(out_name, fontsize=12, fontweight='bold')
+        ax.set_title(out_name, fontsize=16, fontweight='bold')
         ax.set_xticks(x)
-        ax.set_xticklabels(SCENARIO_LABELS, fontsize=12, fontweight='bold')
-        ax.set_xlabel('Deduced output', fontsize=12, fontweight='bold')
+        ax.set_xticklabels(SCENARIO_LABELS, fontsize=16, fontweight='bold')
+        ax.set_xlabel('Deduced output', fontsize=16, fontweight='bold')
         if out_idx == 0:
-            ax.set_ylabel('Win rate (%)', fontsize=12, fontweight='bold')
+            ax.set_ylabel('Win rate (%)', fontsize=16, fontweight='bold')
         
         ax.set_yticks([0, 25, 50, 75, 100])
         #ax.tick_params(axis='y', labelsize=12)
-        ax.set_yticklabels([0, 25, 50, 75, 100], fontsize=12, fontweight='bold')
+        ax.set_yticklabels([0, 25, 50, 75, 100], fontsize=16, fontweight='bold')
         ax.set_ylim(0, 105)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
@@ -412,7 +412,8 @@ def plot_stacked_bars(rank_data: dict, n: int, out_dir: str):
     fig.legend(handles=method_hdl, #+ shade_hdl,
                loc='lower center', ncol=6,
                bbox_to_anchor=(0.5, -0.06),
-               frameon=True, edgecolor='black', fontsize=14)
+               frameon=True, edgecolor='black', 
+               prop={'size': 16, 'weight': 'bold'})
 
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.16)

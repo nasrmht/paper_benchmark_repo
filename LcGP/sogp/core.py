@@ -10,11 +10,11 @@ import copy
 class so_GPRegression:
     def __init__(self, kernel=None, mean_prior = 'zero', var_noise=1e-13, noisy_data = True, use_kernel_grad = True, optimizer='L-BFGS-B', parallel=True, verbose=False):
         """
-        Initialise le modèle de régression par processus gaussien.
-        :param kernel: Fonction noyau qui prend des paramètres et des entrées, et retourne une matrice de covariance.
-        :param optimizer: Optimiseur à utiliser pour l'optimisation des hyperparamètres.
-        : noisey_data : booléen pour faire de l'interpolation 
-        :param var_noise: variance du bruit.
+        Initializes the Gaussian process regression model.
+        :param kernel: Kernel function that takes parameters and inputs, and returns a covariance matrix.
+        :param optimizer: Optimizer to use for hyperparameter optimization.
+        :noisy_data: boolean to perform interpolation.
+        :param var_noise: noise variance.
         """
         self.optimizer = optimizer
         self.kernel = kernel if kernel is not None else RBFKernel()
@@ -42,20 +42,20 @@ class so_GPRegression:
 
     def _initialize_hyperparameters(self, num_params, kernel_params_0, var_noise_0, custom_bounds, multi_start, n_start, seed=10):
         """
-        Initialise les hyperparamètres alétoirement si aucune valeur n'est rentré.
-        Et si multi-start, intialise n_start hyperparamètres par lhs
+        Initializes hyperparameters randomly if no value is provided.
+        And if multi-start, initializes n_start hyperparameters via LHS.
 
-        custom_bounds : bornes d'initialisation (plus petite que les bornes d'optimisation)
+        custom_bounds: initialization bounds (smaller than the optimization bounds)
         """
      
         n_params_k = self.X_train.shape[1] # len(self.kernel.hyperparams)
 
         if multi_start:
-            # Génération des points initiaux avec LHS
+            # Generate initial points with LHS
             lhs = LatinHypercube(d=num_params, seed=seed)
-            sampled_points = lhs.random(n=n_start)  # n_start points dans [0,1]^d
+            sampled_points = lhs.random(n=n_start)  # n_start points in [0,1]^d
 
-            # Mise à l’échelle des points LHS dans les bornes spécifiées
+            # Scale LHS points to the specified bounds
             init_params_list = custom_bounds[:, 0] + sampled_points * (custom_bounds[:, 1] - custom_bounds[:, 0])
         else:
             kernel_params_0 = (np.array(kernel_params_0) if kernel_params_0 is not None 
@@ -99,7 +99,7 @@ class so_GPRegression:
             alpha_one = solve_triangular(L.T, solve_triangular(L, one_1, lower=True))
             mean_hat = (one_1.T @ alpha_y) / (one_1.T @ alpha_one)
         else:
-            raise ValueError("Erreur : mean_prior ne peut être défini que comme 'constant' ou 'zero' !!")
+            raise ValueError("Error: mean_prior can only be defined as 'constant' or 'zero' !!")
             
         alpha_one_y = solve_triangular(L.T, solve_triangular(L, self.y_train - mean_hat * one_1, lower=True))
         sigma_k2 = ((self.y_train - mean_hat * one_1).T @ alpha_one_y) / n
@@ -109,8 +109,8 @@ class so_GPRegression:
 
     def n_log_marginal_likelihood(self, params):
         """
-        Calcule la log-vraisemblance marginale négative.
-        Thread-safe: ne modifie pas self.
+        Computes the negative marginal log-likelihood.
+        Thread-safe: does not modify self.
         """
         n = self.X_train.shape[0]
         # Use a local copy of kernel to avoid race conditions
@@ -138,7 +138,7 @@ class so_GPRegression:
             alpha_one = solve_triangular(L.T, solve_triangular(L, one_1, lower=True))
             mean_hat = (one_1.T @ alpha_y) / (one_1.T @ alpha_one)
         else :
-            raise ValueError(f"Erreur : mean_prior ne peut être défini que comme 'constant' ou 'zero' !! ")
+            raise ValueError("Error: mean_prior can only be defined as 'constant' or 'zero' !!")
             
         alpha_one_y = solve_triangular(L.T, solve_triangular(L, self.y_train - mean_hat * one_1, lower=True))
         sigma_k2 = ((self.y_train - mean_hat * one_1).T @ alpha_one_y) / n
@@ -150,8 +150,8 @@ class so_GPRegression:
     
     def n_log_marginal_likelihood_grad(self, params):
         """
-        Calcule le gradient de la log-vraisemblance marginale négative.
-        Thread-safe: ne modifie pas self.
+        Computes the gradient of the negative marginal log-likelihood.
+        Thread-safe: does not modify self.
         """
         n = self.y_train.shape[0]
         # Use a local copy of kernel to avoid race conditions
@@ -168,14 +168,14 @@ class so_GPRegression:
         
         n_params_K = kernel_params.shape[0]
         
-        # Calcul de la matrice de covariance et décomposition de Cholesky
+        # Compute the covariance matrix and Cholesky decomposition
         K = kernel_(self.X_train) + var_noise * np.eye(n)
         L = cholesky(K, lower=True)
         
-        # Calcul de K_inv
+        # Compute K_inv
         K_inv = solve_triangular(L.T, solve_triangular(L, np.eye(n), lower=True))
 
-        # Calcul de la moyenne a priori
+        # Compute the prior mean
         if self.mean_prior == 'zero':
             mean_hat = 0.0
         elif self.mean_prior == 'constant':
@@ -183,7 +183,7 @@ class so_GPRegression:
             alpha_one = K_inv @ np.ones_like(self.y_train)
             mean_hat = (np.ones_like(self.y_train).T @ alpha_y) / (np.ones_like(self.y_train).T @ alpha_one)
         else:
-            raise ValueError("Erreur : mean_prior ne peut être défini que comme 'constant' ou 'zero' !!")
+            raise ValueError("Error: mean_prior can only be defined as 'constant' or 'zero' !!")
         
         y_centered = self.y_train - mean_hat * np.ones_like(self.y_train)
         alpha_one_y = solve_triangular(L.T, solve_triangular(L, y_centered, lower=True))
@@ -192,7 +192,7 @@ class so_GPRegression:
         sigma_k2 = L_T_y.T @ L_T_y
         term_commun = 1.0 / sigma_k2
         
-        # Calcul du gradient pour tous les hyperparamètres
+        # Compute the gradient for all hyperparameters
         dK_dTheta = kernel_.grad_K(self.X_train)
         
         grad_theta_list = np.zeros(n_params_K)
@@ -204,10 +204,10 @@ class so_GPRegression:
             grad = -np.sum(term)
             grad_theta_list[i] = grad
         
-        # Application du facteur d'échelle pour les paramètres du noyau
+        # Apply scale factor for the kernel parameters
         grad_theta_list *= kernel_params
         
-        # Ajout du gradient pour la variance du bruit si nécessaire
+        # Add the gradient for the noise variance if necessary
         if self.noisy_data:
             dK_dvar = np.eye(n)
             term = term_c * dK_dvar
@@ -221,13 +221,13 @@ class so_GPRegression:
 
     def _optimize_hyperparameters(self, init_k_params,init_var_noise, multi_start, n_start, theta_lb, theta_ub, var_lb,var_ub, maxiter=100,seed=13):
         """
-        Optimise les hyperparamètres en maximisant la log-vraisemblance marginale avec multi-start en parallèle.
+        Optimizes hyperparameters by maximizing the marginal log-likelihood with parallel multi-start.
 
-        :param initial_params: Paramètres initiaux pour l'optimisation.
-        :param multi_start: Active ou désactive le multi-start.
-        :param n_start: Nombre d'initialisations si multi_start est activé.
-        :param n_jobs: Nombre de jobs en parallèle (-1 utilise tous les cœurs disponibles).
-        :return: Résultat de l'optimisation avec les meilleurs hyperparamètres.
+        :param initial_params: Initial parameters for optimization.
+        :param multi_start: Enables or disables multi-start.
+        :param n_start: Number of initializations if multi_start is enabled.
+        :param n_jobs: Number of parallel jobs (-1 uses all available cores).
+        :return: Optimization result with the best hyperparameters.
         """
         
         len_kern_hyp = 0 # #self.kernel.hyperparams.shape[0]
@@ -236,18 +236,18 @@ class so_GPRegression:
                 len_kern_hyp = len(init_k_params)
                 num_params = len_kern_hyp+1
             else:
-                len_kern_hyp = self.X_train.shape[1]  ## Par défaut le nombre de lengthscale à initialiser est la dimension des entrées
+                len_kern_hyp = self.X_train.shape[1]  ## By default, the number of lengthscales to initialize is the input dimension
                 num_params = len_kern_hyp+1
         else : 
             if init_k_params is not None : 
                 len_kern_hyp = len(init_k_params)
                 num_params = len_kern_hyp
             else :
-                len_kern_hyp = self.X_train.shape[1]  ## Par défaut le nombre de lengthscale à initialiser est la dimension des entrées
+                len_kern_hyp = self.X_train.shape[1]  ## By default, the number of lengthscales to initialize is the input dimension
                 num_params = len_kern_hyp
         
 
-        # Bornes spécifiques pour chaque hyperparamètre
+        # Specific bounds for each hyperparameter
 
         Theta_lb = theta_lb if theta_lb is not None else 1e-3*np.ones(len_kern_hyp) #(max(1e-2, min_distance(self.X_train)/np.sqrt(self.X_train.shape[1])))
         Theta_ub = theta_ub if theta_ub is not None else  10*(np.max(self.X_train, axis=0) - np.min(self.X_train,axis=0)) #max_distance(self.X_train) #/np.sqrt(self.X_train.shape[1])  #
@@ -266,7 +266,7 @@ class so_GPRegression:
         bounds = [tuple(sous_bounds) for sous_bounds in custom_bounds]
         init_params_list = self._initialize_hyperparameters(num_params, init_k_params,init_var_noise, custom_bounds,multi_start,n_start,seed)
         #print("init param list : ", init_params_list)
-        # Fonction d'optimisation à exécuter en parallèle
+        # Optimization function to execute in parallel
         def optimize_single_wgrad(init_params):
             results = minimize(
                 self.n_log_marginal_likelihood,
@@ -293,39 +293,39 @@ class so_GPRegression:
         
         
         optimize_func = optimize_single_wgrad if self.use_kernel_grad else optimize_single_wo_grad
-        # Cas où il n'y a qu'un seul ensemble de paramètres initiaux ou si parallel est False
+        # Case where there is only one set of initial parameters or if parallel is False
         if init_params_list.shape[0] == 1 or not self.parallel:
             if init_params_list.shape[0] == 1:
-                # Un seul ensemble de paramètres, pas besoin de parallélisation
+                # A single set of parameters, no need for parallelization
                 results = [optimize_func(init_params_list[0])] #[0]
             else:
-                # Exécution séquentielle de plusieurs ensembles de parFamètres
+                # Sequential execution of multiple parameter sets
                 results = [optimize_func(params) for params in init_params_list]
-            # Sélectionner le meilleur résultat
+            # Select the best result
             best_result, best_cholesky_K, best_alpha, best_sigma_k, best_mean = min(
                 results, key=lambda res: res[0].fun)
         else:
-            # Exécution parallèle lorsque parallel=True et plusieurs ensembles de paramètres
+            # Parallel execution when parallel=True and multiple parameter sets
             try:
-                # Déterminer le nombre de jobs (utiliser tous les cœurs disponibles par défaut)
+                # Determine the number of jobs (use all available cores by default)
                 n_jobs = -1 #self.n_jobs if hasattr(self, 'n_jobs') else -1
-                # Exécution parallèle
+                # Parallel execution
                 results = Parallel(n_jobs=n_jobs, verbose=self.verbose if hasattr(self, 'verbose') else 0)(
                     delayed(optimize_func)(params) for params in init_params_list
                 )
-                # Sélectionner le meilleur résultat
+                # Select the best result
                 best_result, best_cholesky_K, best_alpha, best_sigma_k, best_mean = min(
                     results, key=lambda res: res[0].fun)             
             except ImportError:
-                # Fallback si joblib n'est pas disponible
-                print("Warning: joblib n'est pas disponible. Exécution séquentielle.")
+                # Fallback if joblib is not available
+                print("Warning: joblib is not available. Sequential execution.")
                 results = [optimize_func(params) for params in init_params_list]
                 best_result, best_cholesky_K, best_alpha, best_sigma_k, best_mean = min(
                     results, key=lambda res: res[0].fun)
         
         #print("nll : ", best_result)
 
-        # Mise à jour des variables de l'instance principale (self)
+        # Update the main instance variables (self)
         self.cholesky_K = best_cholesky_K
         self.alpha_one_y = best_alpha
         self.sigma_k = best_sigma_k
@@ -336,16 +336,16 @@ class so_GPRegression:
 
     def fit(self, X, y, multi_start=True, n_start=5, theta_0 = None, var_noise_0=None, theta_lb=None, theta_ub=None, var_lb=None,var_ub=None, hyperparamet_optimize=True, maxiter=100, seed=13):
         """
-        Ajuste le modèle aux données d'entraînement.
+        Fits the model to the training data.
 
-        :param X: Entrées d'entraînement.
-        :param y: Sorties d'entraînement.
+        :param X: Training inputs.
+        :param y: Training outputs.
         """
         self.X_train = X
         
         self.y_train = y.reshape(-1, 1)
 
-        # Optimisation des hyperparamètres
+        # Hyperparameter optimization
         if hyperparamet_optimize:
             opt_result = self._optimize_hyperparameters(theta_0,var_noise_0, multi_start, n_start, theta_lb, theta_ub, var_lb, var_ub,maxiter,seed)
             if self.noisy_data:
@@ -358,10 +358,10 @@ class so_GPRegression:
 
     def predict(self, X_star, return_cov=False):
         """
-        Prédit les sorties pour de nouvelles entrées.
+        Predicts outputs for new inputs.
 
-        :param X_new: Nouvelles entrées.
-        :return: Moyenne et variance des prédictions.
+        :param X_star: New inputs.
+        :return: Mean and variance of predictions.
         """
         K_star = self.kernel(self.X_train, X_star)
         K_star_star = self.kernel(X_star, X_star)

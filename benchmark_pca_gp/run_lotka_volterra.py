@@ -39,7 +39,7 @@ def parse_args():
                    help="Mode rapide : peu d'échantillons et peu de modes")
     p.add_argument("--storage", default=None,
                    help="Chemin pkl explicite (écrase --storage_prefix)")
-    p.add_argument("--storage_prefix", default="results_N_=10_lv",
+    p.add_argument("--storage_prefix", default="results_N_b_=10_lv",
                    help="Préfixe du nommage auto '{prefix}_seed{N}.zarr'")
     p.add_argument("--seed", type=int, default=1,
                    help="Graine aléatoire")

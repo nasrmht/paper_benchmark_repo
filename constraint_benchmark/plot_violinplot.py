@@ -42,7 +42,7 @@ SCENARIO_LABELS_POSTER = ['deduced output $f_1$', 'deduced output $f_2$', 'deduc
 METRICS = ['q2', 'rrmse', 'interval_len', 'coverage_rate']
 METRIC_LABELS = {
     'q2': 'Q²',
-    'rrmse': 'RRMSE', 
+    'rrmse': 'RMSE', 
     'interval_len': 'Interval length',
     'coverage_rate': 'Coverage rate'
 }

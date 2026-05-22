@@ -7,76 +7,76 @@ from .Kernel import Kernel
 
 class LMCKernelUnit:
     """
-    Implémentation du noyau du modèle de corégionalisation linéaire (LMC).
+    Implementation of the Linear Coregionalization Model (LMC) kernel.
     
-    Le noyau est défini comme une somme de produits de Kronecker:
+    The kernel is defined as a sum of Kronecker products:
     K(x, x') = sum_{q=1}^Q B_q ⊗ k_q(x, x')
     
-    où B_q = sigma_B_q * B_unit_q avec B_unit_q ayant des coefficients entre -1 et 1,
-    et k_q est un noyau spatial.
+    where B_q = sigma_B_q * B_unit_q with B_unit_q having coefficients between -1 and 1,
+    and k_q is a spatial kernel.
     
-    Le premier élément de chaque matrice L_q (L_q[0,0]) est fixé comme:
-    L_q[0,0] = 1 - somme des valeurs absolues des autres éléments de L_q
+    The first element of each L_q matrix (L_q[0,0]) is set as:
+    L_q[0,0] = 1 - sum of the absolute values of the other elements of L_q
     """
     
     def __init__(self, base_kernels: List[Kernel], output_dim: int, rank: Optional[List[int]] = None, seed : int = 43):
         """
-        Initialise le noyau LMC.
+        Initializes the LMC kernel.
         
         Args:
-            base_kernels: Liste des noyaux de base k_q(x, x')
-            output_dim: Nombre de sorties (dimension D)
-            rank: Liste des rangs pour chaque matrice de corégionalisation B_q
-                 Si None, toutes les matrices seront de rang complet
+            base_kernels: List of base kernels k_q(x, x')
+            output_dim: Number of outputs (dimension D)
+            rank: List of ranks for each coregionalization matrix B_q
+                 If None, all matrices will be of full rank
         """
         self.base_kernels = base_kernels
         self.output_dim = output_dim
         self.start_idx_Lq = 0
         
-        # Si le rang n'est pas spécifié, utiliser un rang complet (=output_dim)
+        # If rank is not specified, use full rank (=output_dim)
         if rank is None:
             self.rank = [output_dim] * len(base_kernels)
         else:
             if len(rank) != len(base_kernels):
-                raise ValueError("Le nombre de rangs doit correspondre au nombre de noyaux de base")
+                raise ValueError("The number of ranks must match the number of base kernels")
             self.rank = rank
         
-        # Initialiser les matrices Lq_unit (sans le premier élément qui sera calculé)
+        # Initialize the Lq_unit matrices (without the first element which will be computed)
         self.Lq_unit_params = []
         
-        # Initialiser les facteurs d'échelle sigma_B pour chaque matrice B_q
-        self.sigma_B_params = np.ones(len(self.rank)) #* 0.5  # Initialisation à 0.5
+        # Initialize the scale factors sigma_B for each B_q matrix
+        self.sigma_B_params = np.ones(len(self.rank)) #* 0.5  # Initialization at 0.5
         
         self._bounds = []
         np.random.seed(seed)
         start_idx = 0
         for q, r in enumerate(self.rank):
-            # Pour chaque matrice L_q de taille output_dim x r, 
-            # on paramétrise tous les éléments sauf le premier L_q[0,0]
-            n_params = output_dim * r - 1  # -1 pour exclure L_q[0,0]
+            # For each L_q matrix of size output_dim x r, 
+            # we parameterize all elements except the first L_q[0,0]
+            n_params = output_dim * r - 1  # -1 to exclude L_q[0,0]
             
-            # Initialiser les paramètres de L_q (tous sauf le premier élément)
-            # avec des valeurs entre -0.5 et 0.5
+            # Initialize the parameters of L_q (all except the first element)
+            # with values between -0.5 and 0.5
             Lq_unit_vec = np.random.uniform(-1, 1, n_params)
             self.Lq_unit_params.append(Lq_unit_vec)
             
-            # Ajouter les bornes pour chaque élément de Lq_unit (entre -1 et 1)
+            # Add bounds for each element of Lq_unit (between -1 and 1)
             self._bounds.extend([(-1.0, 1.0)] * n_params)
             start_idx += n_params
         self.start_idx_Lq = start_idx
         
         
-        # Ajouter les bornes pour les facteurs d'échelle sigma_B (positifs)
+        # Add bounds for the scale factors sigma_B (positive)
         self._bounds.extend([(1.0, 10.0)] * len(self.rank))
         
-        # Ajouter les bornes pour les paramètres des noyaux de base
+        # Add bounds for the base kernel parameters
         for kernel in self.base_kernels:
             self._bounds.extend(kernel.bounds)
     
     @property
     def params(self) -> np.ndarray:
-        """Retourne tous les hyperparamètres du noyau LMC."""
-        # Concaténer les paramètres de Lq_unit (sans L_q[0,0]), sigma_B et les paramètres des noyaux de base
+        """Returns all hyperparameters of the LMC kernel."""
+        # Concatenate parameters of Lq_unit (without L_q[0,0]), sigma_B and base kernel parameters
         params = np.concatenate(self.Lq_unit_params)
         params = np.concatenate([params, self.sigma_B_params])
         for kernel in self.base_kernels:
@@ -85,19 +85,19 @@ class LMCKernelUnit:
     
     @params.setter
     def params(self, params: np.ndarray):
-        """Définit tous les hyperparamètres du noyau LMC."""
-        # Extraire les paramètres des matrices Lq_unit (sans L_q[0,0])
+        """Sets all hyperparameters of the LMC kernel."""
+        # Extract parameters of Lq_unit matrices (without L_q[0,0])
         start_idx = 0
         for q, r in enumerate(self.rank):
-            n_params_Lq = self.output_dim * r - 1  # -1 pour exclure L_q[0,0]
+            n_params_Lq = self.output_dim * r - 1  # -1 to exclude L_q[0,0]
             self.Lq_unit_params[q] = params[start_idx:start_idx + n_params_Lq]
             start_idx += n_params_Lq
         
-        # Extraire les paramètres sigma_B
+        # Extract sigma_B parameters
         self.sigma_B_params = params[start_idx:start_idx + len(self.rank)]
         start_idx += len(self.rank)
         
-        # Extraire les paramètres des noyaux de base
+        # Extract base kernel parameters
         for kernel in self.base_kernels:
             n_params_kernel = kernel.get_n_params()
             kernel.params = params[start_idx:start_idx + n_params_kernel]
@@ -105,48 +105,48 @@ class LMCKernelUnit:
     
     @property
     def bounds(self) -> List[Tuple[float, float]]:
-        """Retourne les bornes de tous les hyperparamètres."""
+        """Returns the bounds of all hyperparameters."""
         return self._bounds
     
     def _reconstruct_Lq(self, q: int) -> np.ndarray:
         """
-        Reconstruit la matrice Lq complète en calculant le premier élément L_q[0,0]
+        Reconstructs the complete Lq matrix by computing the first element L_q[0,0]
         
         Args:
-            q: Indice du noyau
+            q: Kernel index
             
         Returns:
-            Matrice Lq reconstruite de forme (output_dim, rank[q])
+            Reconstructed Lq matrix of shape (output_dim, rank[q])
         """
         r = self.rank[q]
-        #n_params = self.output_dim * r - 1  # Nombre de paramètres sans L_q[0,0]
+        #n_params = self.output_dim * r - 1  # Number of parameters without L_q[0,0]
         
-        # Créer une matrice pleine pour Lq
+        # Create a full matrix for Lq
         Lq = np.zeros((self.output_dim, r))
         
-        # Remplir la matrice avec les paramètres (sauf le premier élément)
+        # Fill the matrix with the parameters (except the first element)
         param_idx = 0
         for i in range(self.output_dim):
             for j in range(r):
                 if i == 0 and j == 0:
-                    continue  # Sauter le premier élément, on le calculera après
+                    continue  # Skip the first element, it will be computed later
                 Lq[i, j] = self.Lq_unit_params[q][param_idx]
                 param_idx += 1
         
-        # Calculer le premier élément L_q[0,0] = 1 - somme des valeurs absolues des autres
+        # Compute the first element L_q[0,0] = 1 - sum of the absolute values of the others
         Lq[0, 0] = 1.0 - np.sum(np.abs(Lq.flatten()[1:]))
         
         return Lq
     
     def get_B(self, q: int) -> np.ndarray:
         """
-        Retourne la matrice de corégionalisation B_q = sigma_B_q * (Lq_unit @ Lq_unit.T).
+        Returns the coregionalization matrix B_q = sigma_B_q * (Lq_unit @ Lq_unit.T).
         
         Args:
-            q: Indice du noyau
+            q: Kernel index
             
         Returns:
-            Matrice B_q de forme (output_dim, output_dim)
+            B_q matrix of shape (output_dim, output_dim)
         """
         Lq = self._reconstruct_Lq(q)
         B_unit = Lq @ Lq.T
@@ -154,39 +154,39 @@ class LMCKernelUnit:
     
     def get_L(self, q: int) -> np.ndarray:
         """
-        Retourne la matrice Lq complète (y compris le premier élément calculé).
+        Returns the complete Lq matrix (including the computed first element).
         
         Args:
-            q: Indice du noyau
+            q: Kernel index
             
         Returns:
-            Matrice Lq de forme (output_dim, rank[q])
+            Lq matrix of shape (output_dim, rank[q])
         """
         return self._reconstruct_Lq(q)
     
     def get_sigma_B(self, q: int) -> float:
         """
-        Retourne le facteur d'échelle sigma_B pour le q-ième noyau.
+        Returns the scale factor sigma_B for the q-th kernel.
         
         Args:
-            q: Indice du noyau
+            q: Kernel index
             
         Returns:
-            Facteur d'échelle sigma_B_q
+            Scale factor sigma_B_q
         """
         return self.sigma_B_params[q]
     
     def __call__(self, X1: np.ndarray, X2: np.ndarray = None) -> np.ndarray:
         """
-        Calcule la matrice de covariance complète K((x1,d1), (x2,d2)) pour toutes les entrées et sorties.
+        Computes the complete covariance matrix K((x1,d1), (x2,d2)) for all inputs and outputs.
         
         Args:
-            X1: Matrice de forme (n1 * output_dim, input_dim + 1)
-                La dernière colonne indique l'indice de sortie (0 à output_dim-1)
-            X2: Matrice de forme (n2 * output_dim, input_dim + 1), si None, X2 = X1
+            X1: Matrix of shape (n1 * output_dim, input_dim + 1)
+                The last column indicates the output index (0 to output_dim-1)
+            X2: Matrix of shape (n2 * output_dim, input_dim + 1), if None, X2 = X1
             
         Returns:
-            Matrice de covariance de forme (n1 * output_dim, n2 * output_dim)
+            Covariance matrix of shape (n1 * output_dim, n2 * output_dim)
         """
         if X2 is None:
             X2 = X1
@@ -201,32 +201,32 @@ class LMCKernelUnit:
         x1 = X1[:n1_q,:-1]
         x2 = X2[:n2_q,:-1]
         
-        # Initialiser la matrice de covariance
+        # Initialize the covariance matrix
         K = np.zeros((n1, n2))
         
-        # Construire la matrice de covariance par blocs
+        # Construct the covariance matrix by blocks
         for q in range(len(self.base_kernels)):
-            # Calculer la matrice de covariance spatiale k_q(x1, x2)
+            # Compute the spatial covariance matrix k_q(x1, x2)
             K_spatial = self.base_kernels[q](x1, x2)
             #K_spatial = self.base_kernels[q](X1_spatial, X2_spatial)
             
-            # Obtenir la matrice de corégionalisation B_q
+            # Get the coregionalization matrix B_q
             B_q = self.get_B(q)
             
-            # Pour chaque paire d'indices de sortie, ajouter la contribution à K
+            # For each pair of output indices, add the contribution to K
             K += np.kron(B_q, K_spatial) 
         return K
     
     def gradient(self, X1: np.ndarray, X2: np.ndarray = None) -> List[np.ndarray]:
         """
-        Calcule les gradients de la matrice de covariance par rapport à tous les hyperparamètres.
+        Computes the gradients of the covariance matrix with respect to all hyperparameters.
         
         Args:
-            X1: Matrice de forme (n1 * output_dim, input_dim + 1)
-            X2: Matrice de forme (n2 * output_dim, input_dim + 1), si None, X2 = X1
+            X1: Matrix of shape (n1 * output_dim, input_dim + 1)
+            X2: Matrix of shape (n2 * output_dim, input_dim + 1), if None, X2 = X1
             
         Returns:
-            Liste de matrices, chacune de forme (n1 * output_dim, n2 * output_dim)
+            List of matrices, each of shape (n1 * output_dim, n2 * output_dim)
         """
         if X2 is None:
             X2 = X1
@@ -244,53 +244,53 @@ class LMCKernelUnit:
         
         param_idx = 0
         
-        # Gradients par rapport aux éléments de Lq_unit (sauf L_q[0,0])
+        # Gradients with respect to the elements of Lq_unit (except L_q[0,0])
         for q in range(len(self.base_kernels)):
-            # Calculer la matrice de covariance spatiale k_q(x1, x2)
+            # Compute the spatial covariance matrix k_q(x1, x2)
             #K_spatial = self.base_kernels[q](X1_spatial, X2_spatial)
             K_spatial = self.base_kernels[q](x1, x2)
             
-            # Obtenir la matrice Lq complète
+            # Get the complete Lq matrix
             Lq = self._reconstruct_Lq(q)
             sigma_B = self.sigma_B_params[q]
             
-            # Calculer les gradients par rapport aux éléments de Lq
+            # Compute the gradients with respect to the elements of Lq
             for d in range(self.output_dim):
                 for jj in range(self.rank[q]):
                     if d == 0 and jj == 0:
-                        continue  # Sauter L_q[0,0] qui n'est pas un paramètre libre
+                        continue  # Skip L_q[0,0] which is not a free parameter
                     
-                    # Obtenir dB_q par rapport à L_q[d,jj]
+                    # Get dB_q with respect to L_q[d,jj]
                     dB_q = self._compute_dB_q_dL(q, d, jj, Lq, sigma_B)
                     
-                    # Appliquer produit de Kronecker pour obtenir dK
+                    # Apply Kronecker product to get dK
                     gradients[param_idx] =np.kron(dB_q,K_spatial) 
                     param_idx += 1
         
-        # Gradients par rapport aux facteurs d'échelle sigma_B
+        # Gradients with respect to the scale factors sigma_B
         for q in range(len(self.base_kernels)):
-            # Calculer la matrice de covariance spatiale k_q(x1, x2)
+            # Compute the spatial covariance matrix k_q(x1, x2)
             K_spatial = self.base_kernels[q](x1, x2)
             # K_spatial = self.base_kernels[q](X1_spatial, X2_spatial)
             
-            # Obtenir dB_q par rapport à sigma_B
+            # Get dB_q with respect to sigma_B
             dB_q = self._compute_dB_q_dsigma(q)
             
-            # Appliquer produit de Kronecker pour obtenir dK
+            # Apply Kronecker product to get dK
             gradients[param_idx] = np.kron(dB_q,K_spatial) 
             param_idx += 1
         
-        # Gradients par rapport aux hyperparamètres des noyaux de base
+        # Gradients with respect to the hyperparameters of the base kernels
         for q, kernel in enumerate(self.base_kernels):
-            # Calculer les gradients du noyau spatial
+            # Compute the gradients of the spatial kernel
             dK_spatial_list = kernel.gradient(x1, x2)
             
-            # Obtenir la matrice de corégionalisation B_q
+            # Get the coregionalization matrix B_q
             B_q = self.get_B(q)
             
-            # Pour chaque hyperparamètre du noyau, calculer le gradient complet
+            # For each hyperparameter of the kernel, compute the full gradient
             for dK_spatial in dK_spatial_list:
-                # Appliquer produit de Kronecker pour obtenir dK
+                # Apply Kronecker product to get dK
                 gradients[param_idx] = np.kron(B_q, dK_spatial) 
                 param_idx += 1
         
@@ -298,62 +298,62 @@ class LMCKernelUnit:
 
     def _compute_dB_q_dL(self, q: int, d: int, jj: int, Lq: np.ndarray, sigma_B: float) -> np.ndarray:
         """
-        Calcule la dérivée de B_q par rapport à l'élément L_q[d,jj]
+        Computes the derivative of B_q with respect to the element L_q[d,jj]
         
         Args:
-            q: Index du noyau de base
-            d: Index de ligne dans la matrice Lq
-            jj: Index de colonne dans la matrice Lq
-            Lq: Matrice Lq reconstruite
-            sigma_B: Facteur d'échelle pour B_q
+            q: Index of the base kernel
+            d: Row index in the Lq matrix
+            jj: Column index in the Lq matrix
+            Lq: Reconstructed Lq matrix
+            sigma_B: Scale factor for B_q
             
         Returns:
-            Matrice dB_q de forme (output_dim, output_dim)
+            dB_q matrix of shape (output_dim, output_dim)
         """
-        # Calculer la dérivée de Lq par rapport au paramètre courant
+        # Compute the derivative of Lq with respect to the current parameter
         dLq = np.zeros_like(Lq)
         dLq[d, jj] = 1.0
         
-        # La dérivée du premier élément L_q[0,0] par rapport au paramètre L_q[d,jj]
-        # est -sign(L_q[d,jj]) car L_q[0,0] = 1 - somme(abs(autres éléments))
+        # The derivative of the first element L_q[0,0] with respect to the parameter L_q[d,jj]
+        # is -sign(L_q[d,jj]) since L_q[0,0] = 1 - sum(abs(other elements))
         dLq[0, 0] = -np.sign(Lq[d, jj])
         
-        # Calculer la dérivée de B_unit par rapport au paramètre
+        # Compute the derivative of B_unit with respect to the parameter
         dB_unit = dLq @ Lq.T + Lq @ dLq.T
         
-        # Appliquer le facteur d'échelle sigma_B
+        # Apply the scale factor sigma_B
         dB_q = sigma_B * dB_unit
         
         return dB_q
     
     def _compute_dB(self):
         """
-        Calcule la dérivée de B par rapport à tous les paramètres de B (utile en ICM)
+        Computes the derivative of B with respect to all parameters of B (useful in ICM)
         
         Args:
             
             
         Returns:
-            Liste des Matrice dB_q de forme (output_dim, output_dim)
+            List of dB_q matrices of shape (output_dim, output_dim)
         """
         dB = []
         
         for q in range(len(self.base_kernels)):
-            # Calculer la matrice de covariance spatiale k_q(x1, x2)
-            # Obtenir la matrice L_q complète et sigma_B
+            # Compute the spatial covariance matrix k_q(x1, x2)
+            # Get the complete L_q matrix and sigma_B
             L_q = self._reconstruct_Lq(q)
             sigma_B = self.sigma_B_params[q]
             
-            # Parcourir tous les paramètres (lignes 2 à output_dim-1)
+            # Loop over all parameters (rows 2 to output_dim-1)
             for i in range(self.output_dim):
                 for j in range(self.rank[q]):
                     if i == 0 and j == 0:
                         continue
-                    # Calculer dB_q par rapport à L_q[i,j]
+                    # Compute dB_q with respect to L_q[i,j]
                     dB_q = self._compute_dB_q_dL(q, i, j, L_q, sigma_B)
                     dB.append(dB_q)
     
-        # On ajoute la dérivée de B par rapport à sigma_B est simplement B_unit = L_q @ L_q.T
+        # The derivative of B with respect to sigma_B is simply B_unit = L_q @ L_q.T
         for q in range(len(self.base_kernels)):
             dB_q = self._compute_dB_q_dsigma(q)
             dB.append(dB_q)
@@ -362,30 +362,30 @@ class LMCKernelUnit:
 
     def _compute_dB_q_dsigma(self, q: int) -> np.ndarray:
         """
-        Calcule la dérivée de B_q par rapport à sigma_B
+        Computes the derivative of B_q with respect to sigma_B
         
         Args:
-            q: Index du noyau de base
+            q: Index of the base kernel
             
         Returns:
-            Matrice dB_q de forme (output_dim, output_dim)
+            dB_q matrix of shape (output_dim, output_dim)
         """
-        # Obtenir la matrice Lq complète
+        # Get the complete Lq matrix
         Lq = self._reconstruct_Lq(q)
         
-        # La dérivée de B_q par rapport à sigma_B est simplement B_unit = Lq @ Lq.T
+        # The derivative of B_q with respect to sigma_B is simply B_unit = Lq @ Lq.T
         B_unit = Lq @ Lq.T
         
         return B_unit
     
     def get_n_params(self) -> int:
-        """Retourne le nombre total d'hyperparamètres."""
+        """Returns the total number of hyperparameters."""
         return len(self.params)
     
     def init_L_from_pca(self, Y: np.ndarray):
         """
-        Initialise L_q à partir de la PCA des données Y (n x p),
-        en respectant la contrainte u^T L = 0
+        Initializes L_q from the PCA of the data Y (n x p),
+        respecting the constraint u^T L = 0
         """
         Yc = Y - Y.mean(axis=0)
         U, S, Vt = np.linalg.svd(Yc, full_matrices=False)
@@ -393,7 +393,7 @@ class LMCKernelUnit:
         for q, r in enumerate(self.rank):
             L_pca = Vt.T[:, :r] * np.sqrt(S[:r])
 
-            # On ne garde que les lignes libres (1:)
+            # Keep only the free rows (1:)
             mask = np.ones(L_pca.shape, dtype=bool)
             mask[0, 0] = False
 

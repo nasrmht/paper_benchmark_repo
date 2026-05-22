@@ -29,6 +29,10 @@ import matplotlib.lines as mlines
 import matplotlib.patches as mpatches
 from typing import List, Optional, Tuple
 
+plt.rcParams["font.weight"] = "bold"
+plt.rcParams["axes.labelweight"] = "bold"
+plt.rcParams["mathtext.default"] = "bf"
+
 from benchmark_pca_gp.postprocessing.analysis import MultiSeedAnalyzer
 
 
@@ -36,47 +40,49 @@ from benchmark_pca_gp.postprocessing.analysis import MultiSeedAnalyzer
 # Style tables
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Our model gets a vivid warm colour; baselines get cool/muted families.
-_PREFIX_STYLE = {
-    # prefix : (base_hex,   linestyle,  lw,   alpha,  marker, is_ours)
-    "RC":     ("#D62728",   "-",        2.6,  1.00,   "o",    True),   # bold red
-    "CI":     ("#6BAED6",   "--",       1.3,  0.82,   "s",    False),  # muted blue
-    "FI":     ("#74C476",   ":",        1.3,  0.82,   "^",    False),  # muted green
-    "FM":     ("#9E9AC8",   "-.",       1.3,  0.82,   "D",    False),  # muted purple
-}
+# RC (row-wise / PCA-CGP) — bold red, always in front
+C_RC  = "#D62728"
+M_RC  = "o"
+LS_RC = "-"
+LW_RC = 2.6
+MS_RC = 6
+A_RC  = 1.00
+Z_RC  = 10
+
+# CI (col-wise indep.) — blue shades, l=0→3 lighten
+C_CI  = {0: "#ff7f00", 1: "#ff9933", 2: "#ffb266", 3: "#ffcc99"} 
+M_CI  = "s"
+LS_CI = "--"
+LW_CI = 1.3
+MS_CI = 3
+A_CI  = 0.82
+Z_CI  = 6
+
+# FI (field-wise indep.) — green shades, l=0→3 lighten
+C_FI  = {0: "#417C03", 1: "#519204", 2: "#61A805", 3: "#71BE06"}
+M_FI  = "^"
+LS_FI = ":"
+LW_FI = 1.3
+MS_FI = 3
+A_FI  = 0.82
+Z_FI  = 5
+
+# FM (field-wise MOGP-LCM) — muted purple shades
+C_FM  = {0: "#5e239d", 1: "#6f29b0", 2: "#802fbf", 3: "#9135ce"} 
+M_FM  = "D"
+LS_FM = "-."
+LW_FM = 1.3
+MS_FM = 3
+A_FM  = 0.82
+Z_FM  = 4
 
 # jitter window shared across all scenarios in a subplot
 _JITTER = 0.20    # total spread in x units across all scenarios at one k-value
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Colour utilities
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _hex_to_rgb(h: str) -> tuple:
-    h = h.lstrip("#")
-    return tuple(int(h[i:i+2], 16) / 255.0 for i in (0, 2, 4))
-
-
-def _rgb_to_hex(r, g, b) -> str:
-    return "#{:02x}{:02x}{:02x}".format(
-        int(r * 255), int(g * 255), int(b * 255))
-
-
-def _lighten(hex_color: str, factor: float) -> str:
-    """Mix hex_color with white by `factor` (0 = original, 1 = white)."""
-    r, g, b = _hex_to_rgb(hex_color)
-    return _rgb_to_hex(r + (1 - r) * factor,
-                       g + (1 - g) * factor,
-                       b + (1 - b) * factor)
-
-
 def _build_scenario_styles(records: list) -> dict:
     """
     Returns styles[(prefix, fixed_idx)] = dict(color, ls, lw, alpha, marker, zorder).
-
-    Within each prefix, scenarios with different fixed_idx are distinguished by
-    progressively lighter shades of the base colour.
     """
     by_prefix: dict = {}
     for r in records:
@@ -84,23 +90,21 @@ def _build_scenario_styles(records: list) -> dict:
 
     styles = {}
     for pfx, p_set in by_prefix.items():
-        p_list = sorted(p_set)
-        n = len(p_list)
-        base_hex, ls, lw, alpha, marker, is_ours = _PREFIX_STYLE.get(
-            pfx, ("#888888", "--", 1.3, 0.8, "o", False))
-
-        for i, p in enumerate(p_list):
-            # Lighten progressively for i > 0 (deeper = lower index)
-            shade = 0.0 + 0.35 * (i / max(n - 1, 1))   # 0 → 0.35 lightening
-            color = base_hex if i == 0 else _lighten(base_hex, shade)
-            styles[(pfx, p)] = dict(
-                color=color,
-                ls=ls,
-                lw=lw,
-                alpha=alpha,
-                marker=marker,
-                zorder=6 if is_ours else 3,
-            )
+        for p in p_set:
+            if pfx == "RC":
+                st = dict(color=C_RC, ls=LS_RC, lw=LW_RC, alpha=A_RC, marker=M_RC, zorder=Z_RC)
+            elif pfx == "CI":
+                color = C_CI.get(p, C_CI[0])
+                st = dict(color=color, ls=LS_CI, lw=LW_CI, alpha=A_CI, marker=M_CI, zorder=Z_CI)
+            elif pfx == "FI":
+                color = C_FI.get(p, C_FI[0])
+                st = dict(color=color, ls=LS_FI, lw=LW_FI, alpha=A_FI, marker=M_FI, zorder=Z_FI)
+            elif pfx == "FM":
+                color = C_FM.get(p, C_FM[0])
+                st = dict(color=color, ls=LS_FM, lw=LW_FM, alpha=A_FM, marker=M_FM, zorder=Z_FM)
+            else:
+                st = dict(color="#888888", ls="--", lw=1.3, alpha=0.8, marker="o", zorder=3)
+            styles[(pfx, p)] = st
     return styles
 
 
@@ -184,11 +188,11 @@ def _font_sizes(scale: float) -> dict:
     """Return a dict of absolute font sizes derived from `scale`."""
     s = scale
     return {
-        "tick":   max(7,  round(10 * s)),
-        "label":  max(8,  round(11 * s)),
-        "title":  max(9,  round(12 * s)),
-        "annot":  max(8,  round(11 * s)),
-        "legend": max(7,  round( 9 * s)),
+        "tick":   max(11,  round(10 * s)),
+        "label":  max(11,  round(11 * s)),
+        "title":  max(11,  round(12 * s)),
+        "annot":  max(11,  round(11 * s)),
+        "legend": max(11,  round( 9 * s)),
     }
 
 
@@ -216,7 +220,7 @@ def _plot_one_cell(ax, records, field_i, key, scenarios, styles, scale: float = 
     offsets = (np.arange(n_scen) - (n_scen - 1) / 2.0) * (_JITTER / max(n_scen - 1, 1))
 
     def _sort_key(sc):
-        return 0 if _PREFIX_STYLE.get(sc[0], ("", "", 0, 0, "", False))[5] else 1
+        return 0 if sc[0] == "RC" else 1
 
     draw_order = sorted(range(n_scen), key=lambda i: _sort_key(scenarios[i]))
 
@@ -243,8 +247,17 @@ def _plot_one_cell(ax, records, field_i, key, scenarios, styles, scale: float = 
                 else np.zeros(M_cur)
 
         st       = styles[(prefix, p_idx)]
-        is_ours  = _PREFIX_STYLE.get(prefix, ("",) * 6)[5]
-        lbl      = prefix if p_idx == -1 else f"{prefix} (p={p_idx})"
+        is_ours  = (prefix == "RC")
+        if prefix == "RC":
+            lbl = "Row-CMO"
+        elif prefix == "CI":
+            lbl = f"Col-Indep (l={p_idx})"
+        elif prefix == "FI":
+            lbl = f"Fw-Indep (l={p_idx})"
+        elif prefix == "FM":
+            lbl = f"Fw-LCM (l={p_idx})"
+        else:
+            lbl = f"{prefix} (l={p_idx})"
 
         ax.errorbar(
             x, means, yerr=stds,
@@ -356,13 +369,21 @@ def _plot_metric_rows(
             color="silver", linewidth=max(0.5, 0.8 * scale), linestyle="--",
         ))
 
-    # ── Legend — 3 colonnes : RC seul (légèrement agrandi) | CI 2×2 | FI 2×2 ──
+    # ── Legend — 4 colonnes : RC | CI | FI | FM ──
 
     def _leg_handle(pfx, p, boost=False):
         st  = styles[(pfx, p)]
-        lbl = pfx if p == -1 else f"{pfx} (k_*={p})"
         if pfx == "RC":
-            lbl += "  ★"
+            lbl = "Row-CMO"
+        elif pfx == "CI":
+            lbl = f"Col-Indep (l={p})"
+        elif pfx == "FI":
+            lbl = f"Fw-Indep (l={p})"
+        elif pfx == "FM":
+            lbl = f"Fw-LCM (l={p})"
+        else:
+            lbl = f"{pfx} (l={p})"
+            
         return mlines.Line2D([], [],
                              color=st["color"], linestyle=st["ls"],
                              linewidth=st["lw"] * scale * (1.4 if boost else 1.0),
@@ -374,6 +395,8 @@ def _plot_metric_rows(
     def _colmajor(items, ncol):
         """Permute items so que l'affichage row-major de matplotlib
         donne visuellement ncol colonnes remplies de haut en bas."""
+        if not items:
+            return []
         nrow = -(-len(items) // ncol)     # ceil division
         return [items[j * nrow + i]
                 for i in range(nrow) for j in range(ncol)
@@ -385,24 +408,22 @@ def _plot_metric_rows(
                    prop={"size": fs["legend"], "weight": "bold"})
 
     rc_pairs = sorted((pfx, p) for pfx, p in scenarios if pfx == "RC")
-    ci_pairs = _colmajor(sorted([(pfx, p) for pfx, p in scenarios if pfx == "CI"],
-                                key=lambda x: x[1]), ncol=2)
-    fi_pairs = _colmajor(sorted([(pfx, p) for pfx, p in scenarios if pfx == "FI"],
-                                key=lambda x: x[1]), ncol=2)
+    ci_pairs = _colmajor(sorted([(pfx, p) for pfx, p in scenarios if pfx == "CI"], key=lambda x: x[1]), ncol=2)
+    fi_pairs = _colmajor(sorted([(pfx, p) for pfx, p in scenarios if pfx == "FI"], key=lambda x: x[1]), ncol=2)
+    fm_pairs = _colmajor(sorted([(pfx, p) for pfx, p in scenarios if pfx == "FM"], key=lambda x: x[1]), ncol=2)
 
-    fig.suptitle(...)   # uncomment if a super-title is desired
-    for pairs, x_pos, title, boost, ncol in [
-        (rc_pairs, 0.12, "RC", True,  1),
-        (ci_pairs, 0.45, "CI", False, 2),
-        (fi_pairs, 0.78, "FI", False, 2),
+    for pairs, x_pos, boost, ncol in [
+        (rc_pairs, 0.12, False, 1),
+        (ci_pairs, 0.32, False, min(2, max(1, len(ci_pairs)))),
+        (fi_pairs, 0.6, False, min(2, max(1, len(fi_pairs)))),
+        (fm_pairs, 0.87, False, min(2, max(1, len(fm_pairs)))),
     ]:
         if not pairs:
             continue
         leg = fig.legend(
             handles=[_leg_handle(pfx, p, boost) for pfx, p in pairs],
             loc="lower center", bbox_to_anchor=(x_pos, -0.02),
-            ncol=ncol, **_leg_kw)
-        #leg.set_title(title, prop={"size": fs["legend"] + 1, "weight": "bold"})
+            ncol=ncol, columnspacing=0.8, **_leg_kw)
 
     plt.subplots_adjust(bottom=max(0.14, 0.20 * scale))
 

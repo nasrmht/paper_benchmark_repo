@@ -63,7 +63,7 @@ class LMCKernelConstrainedBeta:
 
         # sigma_B: one per kernel, estimated directly, initialised to 1
         self.sigma_B = np.ones(len(self.rank))
-        self._bounds.extend([(1e-4, 10.0)] * len(self.rank))
+        self._bounds.extend([(1.0, 100.0)] * len(self.rank))
 
         for kernel in self.base_kernels:
             self._bounds.extend(kernel.bounds)

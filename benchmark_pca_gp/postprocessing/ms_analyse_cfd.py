@@ -29,6 +29,9 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from typing import List, Optional, Tuple, Dict
 
+plt.rcParams["mathtext.default"] = "regular"
+plt.rcParams["mathtext.fontset"] = "cm"
+
 from benchmark_pca_gp.postprocessing.analysis import MultiSeedAnalyzer
 
 
@@ -44,9 +47,9 @@ FIELD_NAMES = [r"$\tau_{11}$", r"$\tau_{22}$", r"$k$"]
 
 _PREFIX_STYLE = {
     "RC": ("#D62728", "-",  2.6, 1.00, "o", True),
-    "CI": ("#6BAED6", "--", 1.3, 0.82, "s", False),
-    "FI": ("#74C476", ":",  1.3, 0.82, "^", False),
-    "FM": ("#9E9AC8", "-.", 1.3, 0.82, "D", False),
+    "CI": ( "#ff7f00" , "--", 1.3, 0.82, "s", False), #"#6BAED6"
+    "FI": ("#417C03", ":",  1.3, 0.82, "^", False), #"#74C476"
+    "FM": ("#5e239d", "-.", 1.3, 0.82, "D", False), #"#9E9AC8"
 }
 
 
@@ -75,8 +78,7 @@ def _build_scenario_styles(records: list) -> dict:
         base_hex, ls, lw, alpha, marker, is_ours = _PREFIX_STYLE.get(
             pfx, ("#888888", "--", 1.3, 0.8, "o", False))
         for i, p in enumerate(p_list):
-            shade = 0.35 * (i / max(n-1, 1))
-            color = base_hex if i == 0 else _lighten(base_hex, shade)
+            color = base_hex
             styles[(pfx, p)] = dict(
                 color=color, ls=ls, lw=lw, alpha=alpha,
                 marker=marker, zorder=6 if is_ours else 3,
@@ -97,11 +99,11 @@ def _compute_scale(figsize: tuple, Q: int, n_rows: int) -> float:
 def _font_sizes(scale: float) -> dict:
     s = scale
     return {
-        "tick":   max(7,  round(10 * s)),
-        "label":  max(8,  round(11 * s)),
-        "title":  max(9,  round(12 * s)),
-        "annot":  max(8,  round(11 * s)),
-        "legend": max(7,  round( 9 * s)),
+        "tick":   max(11,  round(12 * s)),
+        "label":  max(11,  round(14 * s)),
+        "title":  max(13,  round(16 * s)),
+        "annot":  max(11,  round(12 * s)),
+        "legend": max(10,  round(12 * s)),
     }
 
 
@@ -240,7 +242,16 @@ def _plot_cumulative_cell(ax, records, field_i, key, scenarios, styles,
 
         st      = styles[(prefix, p_idx)]
         is_ours = _PREFIX_STYLE.get(prefix, ("",)*6)[5]
-        lbl     = prefix if p_idx == -1 else f"{prefix} (p={p_idx})"
+        if prefix == "RC":
+            lbl = "Row-CMO"
+        elif prefix == "CI":
+            lbl = f"Col-Indep (l={p_idx})"
+        elif prefix == "FI":
+            lbl = f"Fw-Indep (l={p_idx})"
+        elif prefix == "FM":
+            lbl = f"Fw-LCM (l={p_idx})"
+        else:
+            lbl = prefix if p_idx == -1 else f"{prefix} (l={p_idx})"
 
         ax.errorbar(
             x, means, yerr=stds,
@@ -317,7 +328,17 @@ def plot_cumulative_metric(
     # ── Legend ────────────────────────────────────────────────────────────────
     def _leg_handle(pfx, p):
         st  = styles[(pfx, p)]
-        lbl = pfx if p == -1 else f"{pfx} (p={p})"
+        if pfx == "RC":
+            lbl = "Row-CMO"
+        elif pfx == "CI":
+            lbl = f"Col-Indep (l={p})"
+        elif pfx == "FI":
+            lbl = f"Fw-Indep (l={p})"
+        elif pfx == "FM":
+            lbl = f"Fw-LCM (l={p})"
+        else:
+            lbl = pfx if p == -1 else f"{pfx} (l={p})"
+            
         if pfx == "RC":
             lbl += "  ★"
         return mlines.Line2D(
@@ -377,14 +398,14 @@ def plot_final_metrics(
     Q      = len(records[0][key])
     names  = field_names or FIELD_NAMES[:Q]
     fsize  = figsize or (5 * Q, 4)
-    scale  = _compute_scale(fsize, Q, 1)
+    scale  = 1.0 #_compute_scale(fsize, Q, 1)
     fs     = _font_sizes(scale)
 
     # Gather unique (prefix, fixed_idx) scenarios
     scenarios = sorted({(r["prefix"], r["fixed_idx"]) for r in records})
     styles    = _build_scenario_styles(records)
     n_scen    = len(scenarios)
-    bar_w     = 0.9 / n_scen
+    bar_w     = 1.0 #0.9 / n_scen
 
     fig, axes = plt.subplots(1, Q, figsize=fsize, squeeze=False)
 
@@ -400,19 +421,48 @@ def plot_final_metrics(
             x    = si
 
             st  = styles[(prefix, p_idx)]
-            lbl = prefix if p_idx == -1 else f"{prefix}\np={p_idx}"
-            ax.bar(si, mean, bar_w * 0.85,
-                   color=st["color"], alpha=st["alpha"],
-                   linewidth=0.8*scale, edgecolor="white",
-                   zorder=3)
-            ax.errorbar(si, mean, yerr=std,
-                        fmt="none", color="black",
-                        elinewidth=1.0*scale, capsize=4*scale,
-                        capthick=0.8*scale, zorder=5)
+            if prefix == "RC":
+                lbl = "Row-CMO"
+            elif prefix == "CI":
+                lbl = f"Col-Indep\nl={p_idx}"
+            elif prefix == "FI":
+                lbl = f"Fw-Indep\nl={p_idx}"
+            elif prefix == "FM":
+                lbl = f"Fw-LCM\nl={p_idx}"
+            else:
+                lbl = prefix if p_idx == -1 else f"{prefix}\nl={p_idx}"
+            if len(vals) > 1:
+                parts = ax.violinplot(vals, positions=[si], widths=0.8,
+                                      showmeans=False, showmedians=True, showextrema=False)
+                for pc in parts['bodies']:
+                    pc.set_facecolor(st["color"])
+                    pc.set_edgecolor("white")
+                    pc.set_alpha(st["alpha"])
+                    pc.set_linewidth(1.8*scale)
+                    pc.set_zorder(3)
+
+                ax.boxplot(vals, positions=[si], widths=0.15,
+                           patch_artist=True, showfliers=False, zorder=5,
+                           medianprops=dict(color='white', linewidth=2.5),
+                           boxprops=dict(facecolor=st["color"], alpha=0.9, edgecolor='black', linewidth=1.5),
+                           capprops=dict(color='black', linewidth=1.5),
+                           whiskerprops=dict(color='black', linewidth=1.5))
+            else:
+                ax.bar(si, mean, bar_w * 0.85,
+                       color=st["color"], alpha=st["alpha"],
+                       linewidth=0.8*scale, edgecolor="white",
+                       zorder=3)
 
         ax.set_xticks(range(n_scen))
+        def get_bar_label(pfx, p):
+            if pfx == "RC": return "Row-CMO"
+            elif pfx == "CI": return f"Col-Indep\nl={p}"
+            elif pfx == "FI": return f"Fw-Indep\nl={p}"
+            elif pfx == "FM": return f"Fw-LCM\nl={p}"
+            return pfx if p == -1 else f"{pfx}\nl={p}"
+            
         ax.set_xticklabels(
-            [pfx if p == -1 else f"{pfx}\np={p}" for pfx, p in scenarios],
+            [get_bar_label(pfx, p) for pfx, p in scenarios],
             fontsize=fs["tick"], fontweight="bold", rotation=45, ha="right",
         )
         ax.set_title(names[ci], fontsize=fs["title"], fontweight="bold")
@@ -475,8 +525,15 @@ def plot_constraint_error(
                     capthick=0.8*scale, zorder=5)
 
     ax.set_xticks(range(n_scen))
+    def get_bar_label(pfx, p):
+        if pfx == "RC": return "Row-CMO"
+        elif pfx == "CI": return f"Col-Indep\nl={p}"
+        elif pfx == "FI": return f"Fw-Indep\nl={p}"
+        elif pfx == "FM": return f"Fw-LCM\nl={p}"
+        return pfx if p == -1 else f"{pfx}\nl={p}"
+        
     ax.set_xticklabels(
-        [pfx if p == -1 else f"{pfx}\np={p}" for pfx, p in scenarios],
+        [get_bar_label(pfx, p) for pfx, p in scenarios],
         fontsize=fs["tick"], fontweight="bold", rotation=45, ha="right",
     )
     ax.set_yscale("log")
@@ -578,7 +635,16 @@ def plot_latent_q2(
             means    = col_vals.mean(axis=0)
             stds     = col_vals.std(axis=0) if col_vals.shape[0] > 1 else np.zeros(M)
 
-            lbl = prefix if p_idx == -1 else f"{prefix} (p={p_idx})"
+            if prefix == "RC":
+                lbl = "Row-CMO"
+            elif prefix == "CI":
+                lbl = f"Col-Indep (l={p_idx})"
+            elif prefix == "FI":
+                lbl = f"Fw-Indep (l={p_idx})"
+            elif prefix == "FM":
+                lbl = f"Fw-LCM (l={p_idx})"
+            else:
+                lbl = prefix if p_idx == -1 else f"{prefix} (l={p_idx})"
             ax.errorbar(
                 x, means, yerr=stds,
                 color=st["color"], alpha=st["alpha"],
@@ -721,9 +787,9 @@ def run_all(
 
 def _parse_args():
     p = argparse.ArgumentParser(description="CFD benchmark post-processing")
-    p.add_argument("--prefix", default="results_n=50_cfd",
+    p.add_argument("--prefix", default="results_n=20_cfd",
                    help="Zarr file prefix (default: results_cfd)")
-    p.add_argument("--seeds", type=int, nargs="+", default=[51,52,53],
+    p.add_argument("--seeds", type=int, nargs="+", default=[20, 21, 22,23,24,25,26,27,28],
                    help="Seed list (default: 1 2)")
     p.add_argument("--model_types", nargs="+", default=None,
                    help="Prefixes to include e.g. RC FI CI FM")

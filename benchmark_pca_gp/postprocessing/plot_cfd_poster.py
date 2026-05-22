@@ -428,13 +428,13 @@ def _add_grouped_legend(
                 C_RC, LS_RC, LW_RC, MS_RC, M_RC, "Row-CMO"
         elif prefix == "CI":
             color, ls, lw, ms, marker, label = \
-                C_CI[k], LS_CI, LW_CI, MS_CI, M_CI, f"Col-Indep (p={k})"
+                C_CI[k], LS_CI, LW_CI, MS_CI, M_CI, f"Col-Indep (l={k})"
         elif prefix == "FI":
             color, ls, lw, ms, marker, label = \
-                C_FI[k], LS_FI, LW_FI, MS_FI, M_FI, f"Fw-Indep (p={k})"
+                C_FI[k], LS_FI, LW_FI, MS_FI, M_FI, f"Fw-Indep (l={k})"
         else:  # FM
             color, ls, lw, ms, marker, label = \
-                C_FM[k], LS_FM, LW_FM, MS_FM, M_FM, f"Fw-LCM (p={k})"
+                C_FM[k], LS_FM, LW_FM, MS_FM, M_FM, f"Fw-LCM (l={k})"
         return mlines.Line2D([], [], color=color, marker=marker,
                              markersize=ms, linewidth=lw,
                              linestyle=ls, label=label)
@@ -448,20 +448,20 @@ def _add_grouped_legend(
          ["Row-CMO"],
          1),
         ([_handle("CI", k) for k in ci_v],
-         [f"Col-Indep (p={k})" for k in ci_v],
+         [f"Col-Indep (l={k})" for k in ci_v],
          min(2, max(1, len(ci_v)))),
         ([_handle("FI", k) for k in fi_v],
-         [f"Fw-Indep (p={k})" for k in fi_v],
+         [f"Fw-Indep (l={k})" for k in fi_v],
          min(2, max(1, len(fi_v)))),
         ([_handle("FM", k) for k in fm_v],
-         [f"Fw-LCM (p={k})" for k in fm_v],
+         [f"Fw-LCM (l={k})" for k in fm_v],
          min(2, max(1, len(fm_v)))),
     ]
     active = [(hdl, lbl, nc) for hdl, lbl, nc in groups if hdl]
     if not active:
         return
 
-    x_positions = np.linspace(0.10, 0.70, len(active))
+    x_positions = np.array([0.10, 0.29, 0.55, 0.82]) #np.linspace(0.10, 0.70, len(active))
     common = dict(
         frameon=True, framealpha=0.95, edgecolor="#ccc",
         handlelength=2.0, handletextpad=0.4, borderpad=0.5, labelspacing=0.35,
@@ -488,10 +488,11 @@ def make_all_fields_figure_nozoom(
     save:           bool            = True,
     variant_filter: Optional[dict] = None,
     outdir:         str             = ".",
+    include_dominance: bool         = True,
 ) -> plt.Figure:
     """Poster figure: dominance + full-range RRMSE for all 3 CFD fields.
 
-    Layout (1 row × 4 cols)::
+    Layout (1 row × 4 cols, or 1 row × 3 cols if no dominance)::
 
         [Thm. 3 dominance | RRMSE τ₁₁ | RRMSE τ₂₂ | RRMSE k]
 
@@ -504,21 +505,27 @@ def make_all_fields_figure_nozoom(
     save           : if True, save PDF / PNG / SVG to ``outdir``
     variant_filter : dict {prefix: [k, ...]} to restrict shown variants, or None
     outdir         : output directory
+    include_dominance : whether to include the dominance panel
     """
-    ncols = 1 + Q   # 4 columns: dominance + 3 fields
+    ncols = 1 + Q if include_dominance else Q
     fig   = plt.figure(figsize=(5 * ncols, 4.5))
     fig.patch.set_facecolor("white")
-    gs    = GridSpec(1, ncols, figure=fig,
-                     width_ratios=[1.0] + [1] * 3,
-                     wspace=0.45)
+    if include_dominance:
+        gs    = GridSpec(1, ncols, figure=fig,
+                         width_ratios=[1.0] + [1] * 3,
+                         wspace=0.45)
+    else:
+        gs    = GridSpec(1, ncols, figure=fig, wspace=0.45)
 
-    # ── Dominance panel ───────────────────────────────────────────────────────
-    ax_dom = fig.add_subplot(gs[0, 0])
-    plot_dominance(ax_dom, agg_by_n, fs, [n_label])
+    if include_dominance:
+        # ── Dominance panel ───────────────────────────────────────────────────────
+        ax_dom = fig.add_subplot(gs[0, 0])
+        plot_dominance(ax_dom, agg_by_n, fs, [n_label])
 
     # ── RRMSE panels — one per field ──────────────────────────────────────────
     for j in range(Q):
-        ax = fig.add_subplot(gs[0, j + 1])
+        col_idx = j + 1 if include_dominance else j
+        ax = fig.add_subplot(gs[0, col_idx])
         plot_rrmse(
             ax, data, n_label, j, fs,
             show_ylabel=(j == 0),
@@ -536,8 +543,9 @@ def make_all_fields_figure_nozoom(
 
     if save:
         os.makedirs(outdir, exist_ok=True)
+        suffix = "all_fields_nozoom" if include_dominance else "rrmse_only"
         for ext in ["pdf", "png", "svg"]:
-            fname = os.path.join(outdir, f"poster_A_cfd_all_fields_nozoom.{ext}")
+            fname = os.path.join(outdir, f"poster_A_cfd_{suffix}.{ext}")
             dpi   = 300 if ext == "pdf" else 200
             fig.savefig(fname, dpi=dpi, bbox_inches="tight",
                         facecolor=fig.get_facecolor())
@@ -565,6 +573,8 @@ def _parse_args():
                    help="Output directory for figures (default: results_cfd)")
     p.add_argument("--no_show", action="store_true",
                    help="Do not call plt.show()")
+    p.add_argument("--rrmse_only", action="store_true",
+                   help="If set, only plot the RRMSE panels (no dominance).")
     return p.parse_args()
 
 
@@ -598,9 +608,22 @@ if __name__ == "__main__":
         save=True,
         variant_filter=variant_filter,
         outdir=args.outdir,
+        include_dominance=not args.rrmse_only,
     )
+
+    if not args.rrmse_only:
+        print(f"\nBuilding RRMSE-only figure for {n_label} …")
+        fig2 = make_all_fields_figure_nozoom(
+            agg_by_n, data, n_label, fs,
+            save=True,
+            variant_filter=variant_filter,
+            outdir=args.outdir,
+            include_dominance=False,
+        )
 
     if not args.no_show:
         plt.show()
     else:
         plt.close(fig)
+        if not args.rrmse_only:
+            plt.close(fig2)

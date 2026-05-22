@@ -4,7 +4,7 @@ from typing import List, Tuple, Dict, Optional, Union, Callable
 from dataclasses import dataclass
 
 class Kernel:
-    """Classe de base pour les noyaux de covariance."""
+    """Base class for covariance kernels."""
     
     def __init__(self, input_dim: int):
         self.input_dim = input_dim
@@ -12,49 +12,49 @@ class Kernel:
         self._bounds = []
         
     def __call__(self, X1: np.ndarray, X2: np.ndarray = None) -> np.ndarray:
-        """Calcule la matrice de covariance entre X1 et X2."""
+        """Computes the covariance matrix between X1 and X2."""
         raise NotImplementedError("Subclasses must implement __call__")
     
     def gradient(self, X1: np.ndarray, X2: np.ndarray = None) -> List[np.ndarray]:
-        """Calcule le gradient de la matrice de covariance par rapport aux hyperparamètres."""
+        """Computes the gradient of the covariance matrix with respect to the hyperparameters."""
         raise NotImplementedError("Subclasses must implement gradient")
     
     @property
     def params(self) -> np.ndarray:
-        """Retourne les hyperparamètres actuels."""
+        """Returns the current hyperparameters."""
         return self._params
     
     @params.setter
     def params(self, params: np.ndarray):
-        """Définit les hyperparamètres."""
+        """Sets the hyperparameters."""
         if params.shape != self._params.shape:
             raise ValueError(f"Shapes do not match: {params.shape} vs {self._params.shape}")
         self._params = params
     
     @property
     def bounds(self) -> List[Tuple[float, float]]:
-        """Retourne les bornes des hyperparamètres pour l'optimisation."""
+        """Returns the bounds of the hyperparameters for optimization."""
         return self._bounds
     
     def get_n_params(self) -> int:
-        """Retourne le nombre d'hyperparamètres."""
+        """Returns the number of hyperparameters."""
         return len(self._params)
 
 
 class RBFKernel(Kernel):
-    """Noyau RBF (Radial Basis Function) ou gaussien, avec support pour anisotropie."""
+    """RBF (Radial Basis Function) or Gaussian kernel, with support for anisotropy."""
     
     def __init__(self, input_dim: int, lengthscale=None, ARD=True):
         """
-        Initialise le noyau RBF.
+        Initializes the RBF kernel.
         
         Args:
-            input_dim: Dimension des entrées
-            lengthscale: Échelle de longueur initiale. Si None, initialisé à 1.0
-                         Si c'est un scalaire, utilisé pour toutes les dimensions si ARD=False,
-                         ou comme valeur initiale pour toutes les dimensions si ARD=True
-                         Si c'est un tableau, doit avoir une longueur égale à input_dim pour ARD=True
-            ARD: Si True, utilise un lengthscale différent pour chaque dimension (Automatic Relevance Determination)
+            input_dim: Input dimension
+            lengthscale: Initial length scale. If None, initialized to 1.0
+                         If scalar, used for all dimensions if ARD=False,
+                         or as initial value for all dimensions if ARD=True
+                         If array, must have a length equal to input_dim for ARD=True
+            ARD: If True, uses a different length scale for each dimension (Automatic Relevance Determination)
         """
         super().__init__(input_dim)
         
@@ -62,17 +62,17 @@ class RBFKernel(Kernel):
         len_lengthscale = input_dim if ARD else 1
         
         if lengthscale is None:
-            # Initialisation par défaut
-            self._params = np.zeros(len_lengthscale)  # log(1.0) = 0 pour toutes les dimensions
+            # Default initialization
+            self._params = np.zeros(len_lengthscale)  # log(1.0) = 0 for all dimensions
         elif np.isscalar(lengthscale):
-            # Scalaire unique fourni
+            # Single scalar provided
             self._params = np.ones(len_lengthscale) * np.log(lengthscale)
         else:
-            # Tableau de lengthscales fourni
+            # Array of lengthscales provided
             if ARD and len(lengthscale) != input_dim:
-                raise ValueError(f"Pour ARD=True, lengthscale doit avoir {input_dim} éléments")
+                raise ValueError(f"For ARD=True, lengthscale must have {input_dim} elements")
             elif not ARD and len(lengthscale) > 1:
-                print(f"Attention: ARD=False mais lengthscale a {len(lengthscale)} éléments. Seul le premier sera utilisé.")
+                print(f"Warning: ARD=False but lengthscale has {len(lengthscale)} elements. Only the first one will be used.")
                 self._params = np.array([np.log(lengthscale[0])])
             else:
                 self._params = np.log(np.array(lengthscale))
@@ -81,43 +81,43 @@ class RBFKernel(Kernel):
     
     def __call__(self, X1: np.ndarray, X2: np.ndarray = None) -> np.ndarray:
         """
-        Calcule la matrice de covariance K(X1, X2) pour le noyau RBF anisotropique.
+        Computes the covariance matrix K(X1, X2) for the anisotropic RBF kernel.
         
         Args:
-            X1: Matrice de forme (n1, input_dim)
-            X2: Matrice de forme (n2, input_dim), si None, X2 = X1
+            X1: Matrix of shape (n1, input_dim)
+            X2: Matrix of shape (n2, input_dim), if None, X2 = X1
             
         Returns:
-            Matrice de covariance de forme (n1, n2)
+            Covariance matrix of shape (n1, n2)
         """
         if X2 is None:
             X2 = X1
             
-        # Extraire les paramètres
+        # Extract parameters
         variance = 1.0
         lengthscales = np.exp(self._params)
         
-        # Pour le cas anisotropique (ARD=True)
+        # For the anisotropic case (ARD=True)
         if self.ARD:
-            # Pondérer chaque dimension par son lengthscale
+            # Weight each dimension by its lengthscale
             X1_scaled = X1 / lengthscales
             X2_scaled = X2 / lengthscales
             
-            # Calculer la distance euclidienne carrée pondérée
+            # Compute the weighted squared Euclidean distance
             X1_norm = np.sum(X1_scaled**2, axis=1).reshape(-1, 1)
             X2_norm = np.sum(X2_scaled**2, axis=1).reshape(1, -1)
             dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1_scaled, X2_scaled.T)
         else:
-            # Cas isotropique (ARD=False)
+            # Isotropic case (ARD=False)
             lengthscale = lengthscales[0]
             
-            # Calculer la distance euclidienne carrée
+            # Compute the squared Euclidean distance
             X1_norm = np.sum(X1**2, axis=1).reshape(-1, 1)
             X2_norm = np.sum(X2**2, axis=1).reshape(1, -1)
             dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1, X2.T)
             dist_sq = dist_sq / (lengthscale**2)
         
-        # Appliquer le noyau RBF
+        # Apply the RBF kernel
         K = variance * np.exp(-0.5 * dist_sq)
         return K
     
@@ -125,48 +125,48 @@ class RBFKernel(Kernel):
     #     return K_gradient
     def gradient(self, X1: np.ndarray, X2: np.ndarray = None) -> List[np.ndarray]:
         """
-        Calcule les dérivées de la matrice de covariance par rapport aux hyperparamètres.
+        Computes the derivatives of the covariance matrix with respect to the hyperparameters.
         
         Args:
-            X1: Matrice de forme (n1, input_dim)
-            X2: Matrice de forme (n2, input_dim), si None, X2 = X1
+            X1: Matrix of shape (n1, input_dim)
+            X2: Matrix of shape (n2, input_dim), if None, X2 = X1
             
         Returns:
-            Liste de matrices, chacune de forme (n1, n2) correspondant aux dérivées
-            par rapport à chaque hyperparamètre
+            List of matrices, each of shape (n1, n2) corresponding to the derivatives
+            with respect to each hyperparameter
         """
         if X2 is None:
             X2 = X1
             
-        # Extraire les paramètres
+        # Extract parameters
         variance = 1.0
         lengthscales = np.exp(self._params)
         
-        # Calculer la matrice de covariance
+        # Compute the covariance matrix
         K = self.__call__(X1, X2)
         
         gradients = []
         
         if self.ARD:
-            # Cas anisotropique: un gradient par dimension
+            # Anisotropic case: one gradient per dimension
             for d in range(self.input_dim):
-                # Calculer la différence carrée pour cette dimension
+                # Compute the squared difference for this dimension
                 diff_d = X1[:, d:d+1] - X2[:, d:d+1].T
                 sq_diff_d = diff_d**2
                 
-                # Gradient par rapport à log(lengthscale) pour cette dimension
+                # Gradient with respect to log(lengthscale) for this dimension
                 dK_dlog_lengthscale_d = K * (sq_diff_d / (lengthscales[d]**2))
                 gradients.append(dK_dlog_lengthscale_d)
         else:
-            # Cas isotropique: un seul gradient
+            # Isotropic case: a single gradient
             lengthscale = lengthscales[0]
             
-            # Calculer la distance euclidienne carrée
+            # Compute the squared Euclidean distance
             X1_norm = np.sum(X1**2, axis=1).reshape(-1, 1)
             X2_norm = np.sum(X2**2, axis=1).reshape(1, -1)
             dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1, X2.T)
             
-            # Gradient par rapport à log(lengthscale)
+            # Gradient with respect to log(lengthscale)
             dK_dlog_lengthscale = K * (dist_sq / (lengthscale**2))
             gradients.append(dK_dlog_lengthscale)
         
@@ -174,19 +174,19 @@ class RBFKernel(Kernel):
 
 
 class Matern52Kernel(Kernel):
-    """Noyau Matern 5/2 avec support pour anisotropie."""
+    """Matern 5/2 kernel with anisotropy support."""
     
     def __init__(self, input_dim: int, lengthscale=None, ARD=True):
         """
-        Initialise le noyau Matern 5/2.
+        Initializes the Matern 5/2 kernel.
         
         Args:
-            input_dim: Dimension des entrées
-            lengthscale: Échelle de longueur initiale. Si None, initialisé à 1.0
-                         Si c'est un scalaire, utilisé pour toutes les dimensions si ARD=False,
-                         ou comme valeur initiale pour toutes les dimensions si ARD=True
-                         Si c'est un tableau, doit avoir une longueur égale à input_dim pour ARD=True
-            ARD: Si True, utilise un lengthscale différent pour chaque dimension (Automatic Relevance Determination)
+            input_dim: Input dimension
+            lengthscale: Initial length scale. If None, initialized to 1.0
+                         If scalar, used for all dimensions if ARD=False,
+                         or as initial value for all dimensions if ARD=True
+                         If array, must have a length equal to input_dim for ARD=True
+            ARD: If True, uses a different length scale for each dimension (Automatic Relevance Determination)
         """
         super().__init__(input_dim)
         
@@ -194,17 +194,17 @@ class Matern52Kernel(Kernel):
         len_lengthscale = input_dim if ARD else 1
         
         if lengthscale is None:
-            # Initialisation par défaut
-            self._params = np.zeros(len_lengthscale)  # log(1.0) = 0 pour toutes les dimensions
+            # Default initialization
+            self._params = np.zeros(len_lengthscale)  # log(1.0) = 0 for all dimensions
         elif np.isscalar(lengthscale):
-            # Scalaire unique fourni
+            # Single scalar provided
             self._params = np.ones(len_lengthscale) * np.log(lengthscale)
         else:
-            # Tableau de lengthscales fourni
+            # Array of lengthscales provided
             if ARD and len(lengthscale) != input_dim:
-                raise ValueError(f"Pour ARD=True, lengthscale doit avoir {input_dim} éléments")
+                raise ValueError(f"For ARD=True, lengthscale must have {input_dim} elements")
             elif not ARD and len(lengthscale) > 1:
-                print(f"Attention: ARD=False mais lengthscale a {len(lengthscale)} éléments. Seul le premier sera utilisé.")
+                print(f"Warning: ARD=False but lengthscale has {len(lengthscale)} elements. Only the first one will be used.")
                 self._params = np.array([np.log(lengthscale[0])])
             else:
                 self._params = np.log(np.array(lengthscale))
@@ -213,47 +213,47 @@ class Matern52Kernel(Kernel):
     
     def __call__(self, X1: np.ndarray, X2: np.ndarray = None) -> np.ndarray:
         """
-        Calcule la matrice de covariance K(X1, X2) pour le noyau Matern 5/2 anisotropique.
+        Computes the covariance matrix K(X1, X2) for the anisotropic Matern 5/2 kernel.
         
         Args:
-            X1: Matrice de forme (n1, input_dim)
-            X2: Matrice de forme (n2, input_dim), si None, X2 = X1
+            X1: Matrix of shape (n1, input_dim)
+            X2: Matrix of shape (n2, input_dim), if None, X2 = X1
             
         Returns:
-            Matrice de covariance de forme (n1, n2)
+            Covariance matrix of shape (n1, n2)
         """
         if X2 is None:
             X2 = X1
             
-        # Extraire les paramètres
+        # Extract parameters
         variance = 1.0
         lengthscales = np.exp(self._params)
         
-        # Pour le cas anisotropique (ARD=True)
+        # For the anisotropic case (ARD=True)
         if self.ARD:
-            # Pondérer chaque dimension par son lengthscale
+            # Weight each dimension by its lengthscale
             X1_scaled = X1 / lengthscales
             X2_scaled = X2 / lengthscales
             
-            # Calculer la distance euclidienne pondérée
+            # Compute the weighted squared Euclidean distance
             X1_norm = np.sum(X1_scaled**2, axis=1).reshape(-1, 1)
             X2_norm = np.sum(X2_scaled**2, axis=1).reshape(1, -1)
             dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1_scaled, X2_scaled.T)
             dist = np.sqrt(np.maximum(dist_sq, 1e-36))
             
-            # Calcul du noyau Matern 5/2
+            # Compute the Matern 5/2 kernel
             scaled_dist = np.sqrt(5) * dist
         else:
-            # Cas isotropique (ARD=False)
+            # Isotropic case (ARD=False)
             lengthscale = lengthscales[0]
             
-            # Calculer la distance euclidienne
+            # Compute the Euclidean distance
             X1_norm = np.sum(X1**2, axis=1).reshape(-1, 1)
             X2_norm = np.sum(X2**2, axis=1).reshape(1, -1)
             dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1, X2.T)
             dist = np.sqrt(np.maximum(dist_sq, 1e-36))
             
-            # Calcul du noyau Matern 5/2
+            # Compute the Matern 5/2 kernel
             scaled_dist = np.sqrt(5) * dist / lengthscale
         
         K = variance * (1.0 + scaled_dist + scaled_dist**2/3.0) * np.exp(-scaled_dist)
@@ -261,39 +261,39 @@ class Matern52Kernel(Kernel):
     
     def gradient(self, X1: np.ndarray, X2: np.ndarray = None) -> List[np.ndarray]:
         """
-        Calcule les dérivées de la matrice de covariance par rapport aux hyperparamètres.
+        Computes the derivatives of the covariance matrix with respect to the hyperparameters.
         
         Args:
-            X1: Matrice de forme (n1, input_dim)
-            X2: Matrice de forme (n2, input_dim), si None, X2 = X1
+            X1: Matrix of shape (n1, input_dim)
+            X2: Matrix of shape (n2, input_dim), if None, X2 = X1
             
         Returns:
-            Liste de matrices, chacune de forme (n1, n2) correspondant aux dérivées
-            par rapport à chaque hyperparamètre
+            List of matrices, each of shape (n1, n2) corresponding to the derivatives
+            with respect to each hyperparameter
         """
         if X2 is None:
             X2 = X1
             
-        # Extraire les paramètres
+        # Extract parameters
         variance = 1.0
         lengthscales = np.exp(self._params)
         
         gradients = []
         
         if self.ARD:
-            # Cas anisotropique: un gradient par dimension
+            # Anisotropic case: one gradient per dimension
             for d in range(self.input_dim):
-                # Créer des copies des matrices X1 et X2 pour cette dimension
+                # Create copies of X1 and X2 matrices for this dimension
                 X1_copy = X1.copy()
                 X2_copy = X2.copy()
                 
-                # Mettre à zéro toutes les dimensions sauf celle d'intérêt
+                # Zero out all dimensions except the one of interest
                 for dim in range(self.input_dim):
                     if dim != d:
                         X1_copy[:, dim] = 0
                         X2_copy[:, dim] = 0
                 
-                # Calculer la distance euclidienne pour cette dimension uniquement
+                # Compute the Euclidean distance for this dimension only
                 X1_d_scaled = X1_copy / lengthscales[d]
                 X2_d_scaled = X2_copy / lengthscales[d]
                 
@@ -301,7 +301,7 @@ class Matern52Kernel(Kernel):
                 X2_d_norm = np.sum(X2_d_scaled**2, axis=1).reshape(1, -1)
                 dist_d_sq = X1_d_norm + X2_d_norm - 2.0 * np.dot(X1_d_scaled, X2_d_scaled.T)
                 
-                # Calculer la distance euclidienne globale (toutes dimensions)
+                # Compute the global Euclidean distance (all dimensions)
                 X1_scaled = X1 / lengthscales
                 X2_scaled = X2 / lengthscales
                  
@@ -310,12 +310,12 @@ class Matern52Kernel(Kernel):
                 dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1_scaled, X2_scaled.T)
                 dist = np.sqrt(np.maximum(dist_sq, 1e-36))
                 
-                # Calcul du noyau Matern 5/2
+                # Compute the Matern 5/2 kernel
                 scaled_dist = np.sqrt(5) * dist
                 base = (1.0 + scaled_dist + scaled_dist**2/3.0) * np.exp(-scaled_dist)
                 
-                # Calculer la contribution au gradient pour cette dimension
-                # Pour Matern 5/2, le gradient est plus complexe
+                # Compute the gradient contribution for this dimension
+                # For Matern 5/2, the gradient is more complex
                 with np.errstate(divide='ignore', invalid='ignore'):
                     grad_coef = np.where(
                         dist > 1e-6,
@@ -326,19 +326,19 @@ class Matern52Kernel(Kernel):
                 dK_dlog_lengthscale_d = variance * np.exp(-scaled_dist) * grad_coef
                 gradients.append(dK_dlog_lengthscale_d)
         else:
-            # Cas isotropique: un seul gradient
+            # Isotropic case: a single gradient
             lengthscale = lengthscales[0]
             
-            # Calculer la distance euclidienne
+            # Compute the Euclidean distance
             X1_norm = np.sum(X1**2, axis=1).reshape(-1, 1)
             X2_norm = np.sum(X2**2, axis=1).reshape(1, -1)
             dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1, X2.T)
             dist = np.sqrt(np.maximum(dist_sq, 1e-36))
             
-            # Calcul du noyau Matern 5/2
+            # Compute the Matern 5/2 kernel
             scaled_dist = np.sqrt(5) * dist / lengthscale
             
-            # Gradient par rapport à log(lengthscale)
+            # Gradient with respect to log(lengthscale)
             dK_dlog_lengthscale = variance * np.exp(-scaled_dist) * (
                 scaled_dist**2 * (scaled_dist + 1) / 3.0
             )
@@ -351,19 +351,19 @@ class Matern52Kernel(Kernel):
 
 
 class Matern32Kernel(Kernel):
-    """Noyau Matern 3/2 avec support pour anisotropie."""
+    """Matern 3/2 kernel with anisotropy support."""
     
     def __init__(self, input_dim: int, lengthscale=None, ARD=True):
         """
-        Initialise le noyau Matern 3/2.
+        Initializes the Matern 3/2 kernel.
         
         Args:
-            input_dim: Dimension des entrées
-            lengthscale: Échelle de longueur initiale. Si None, initialisé à 1.0
-                         Si c'est un scalaire, utilisé pour toutes les dimensions si ARD=False,
-                         ou comme valeur initiale pour toutes les dimensions si ARD=True
-                         Si c'est un tableau, doit avoir une longueur égale à input_dim pour ARD=True
-            ARD: Si True, utilise un lengthscale différent pour chaque dimension (Automatic Relevance Determination)
+            input_dim: Input dimension
+            lengthscale: Initial length scale. If None, initialized to 1.0
+                         If scalar, used for all dimensions if ARD=False,
+                         or as initial value for all dimensions if ARD=True
+                         If array, must have a length equal to input_dim for ARD=True
+            ARD: If True, uses a different length scale for each dimension (Automatic Relevance Determination)
         """
         super().__init__(input_dim)
         
@@ -371,17 +371,17 @@ class Matern32Kernel(Kernel):
         len_lengthscale = input_dim if ARD else 1
         
         if lengthscale is None:
-            # Initialisation par défaut
-            self._params = np.zeros(len_lengthscale)  # log(1.0) = 0 pour toutes les dimensions
+            # Default initialization
+            self._params = np.zeros(len_lengthscale)  # log(1.0) = 0 for all dimensions
         elif np.isscalar(lengthscale):
-            # Scalaire unique fourni
+            # Single scalar provided
             self._params = np.ones(len_lengthscale) * np.log(lengthscale)
         else:
-            # Tableau de lengthscales fourni
+            # Array of lengthscales provided
             if ARD and len(lengthscale) != input_dim:
-                raise ValueError(f"Pour ARD=True, lengthscale doit avoir {input_dim} éléments")
+                raise ValueError(f"For ARD=True, lengthscale must have {input_dim} elements")
             elif not ARD and len(lengthscale) > 1:
-                print(f"Attention: ARD=False mais lengthscale a {len(lengthscale)} éléments. Seul le premier sera utilisé.")
+                print(f"Warning: ARD=False but lengthscale has {len(lengthscale)} elements. Only the first one will be used.")
                 self._params = np.array([np.log(lengthscale[0])])
             else:
                 self._params = np.log(np.array(lengthscale))
@@ -390,47 +390,47 @@ class Matern32Kernel(Kernel):
     
     def __call__(self, X1: np.ndarray, X2: np.ndarray = None) -> np.ndarray:
         """
-        Calcule la matrice de covariance K(X1, X2) pour le noyau Matern 3/2 anisotropique.
+        Computes the covariance matrix K(X1, X2) for the anisotropic Matern 3/2 kernel.
         
         Args:
-            X1: Matrice de forme (n1, input_dim)
-            X2: Matrice de forme (n2, input_dim), si None, X2 = X1
+            X1: Matrix of shape (n1, input_dim)
+            X2: Matrix of shape (n2, input_dim), if None, X2 = X1
             
         Returns:
-            Matrice de covariance de forme (n1, n2)
+            Covariance matrix of shape (n1, n2)
         """
         if X2 is None:
             X2 = X1
             
-        # Extraire les paramètres
+        # Extract parameters
         variance = 1.0
         lengthscales = np.exp(self._params)
         
-        # Pour le cas anisotropique (ARD=True)
+        # For the anisotropic case (ARD=True)
         if self.ARD:
-            # Pondérer chaque dimension par son lengthscale
+            # Weight each dimension by its lengthscale
             X1_scaled = X1 / lengthscales
             X2_scaled = X2 / lengthscales
             
-            # Calculer la distance euclidienne pondérée
+            # Compute the weighted squared Euclidean distance
             X1_norm = np.sum(X1_scaled**2, axis=1).reshape(-1, 1)
             X2_norm = np.sum(X2_scaled**2, axis=1).reshape(1, -1)
             dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1_scaled, X2_scaled.T)
             dist = np.sqrt(np.maximum(dist_sq, 1e-36))
             
-            # Calcul du noyau Matern 3/2
+            # Compute the Matern 3/2 kernel
             scaled_dist = np.sqrt(3) * dist
         else:
-            # Cas isotropique (ARD=False)
+            # Isotropic case (ARD=False)
             lengthscale = lengthscales[0]
             
-            # Calculer la distance euclidienne
+            # Compute the Euclidean distance
             X1_norm = np.sum(X1**2, axis=1).reshape(-1, 1)
             X2_norm = np.sum(X2**2, axis=1).reshape(1, -1)
             dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1, X2.T)
             dist = np.sqrt(np.maximum(dist_sq, 1e-36))
             
-            # Calcul du noyau Matern 3/2
+            # Compute the Matern 3/2 kernel
             scaled_dist = np.sqrt(3) * dist / lengthscale
         
         K = variance * (1.0 + scaled_dist) * np.exp(-scaled_dist)
@@ -438,39 +438,39 @@ class Matern32Kernel(Kernel):
     
     def gradient(self, X1: np.ndarray, X2: np.ndarray = None) -> List[np.ndarray]:
         """
-        Calcule les dérivées de la matrice de covariance par rapport aux hyperparamètres.
+        Computes the derivatives of the covariance matrix with respect to the hyperparameters.
         
         Args:
-            X1: Matrice de forme (n1, input_dim)
-            X2: Matrice de forme (n2, input_dim), si None, X2 = X1
+            X1: Matrix of shape (n1, input_dim)
+            X2: Matrix of shape (n2, input_dim), if None, X2 = X1
             
         Returns:
-            Liste de matrices, chacune de forme (n1, n2) correspondant aux dérivées
-            par rapport à chaque hyperparamètre
+            List of matrices, each of shape (n1, n2) corresponding to the derivatives
+            with respect to each hyperparameter
         """
         if X2 is None:
             X2 = X1
             
-        # Extraire les paramètres
+        # Extract parameters
         variance = 1.0
         lengthscales = np.exp(self._params)
         
         gradients = []
         
         if self.ARD:
-            # Cas anisotropique: un gradient par dimension
+            # Anisotropic case: one gradient per dimension
             for d in range(self.input_dim):
-                # Créer des copies des matrices X1 et X2 pour cette dimension
+                # Create copies of X1 and X2 matrices for this dimension
                 X1_copy = X1.copy()
                 X2_copy = X2.copy()
                 
-                # Mettre à zéro toutes les dimensions sauf celle d'intérêt
+                # Zero out all dimensions except the one of interest
                 for dim in range(self.input_dim):
                     if dim != d:
                         X1_copy[:, dim] = 0
                         X2_copy[:, dim] = 0
                 
-                # Calculer la distance euclidienne pour cette dimension uniquement
+                # Compute the Euclidean distance for this dimension only
                 X1_d_scaled = X1_copy / lengthscales[d]
                 X2_d_scaled = X2_copy / lengthscales[d]
                 
@@ -478,7 +478,7 @@ class Matern32Kernel(Kernel):
                 X2_d_norm = np.sum(X2_d_scaled**2, axis=1).reshape(1, -1)
                 dist_d_sq = X1_d_norm + X2_d_norm - 2.0 * np.dot(X1_d_scaled, X2_d_scaled.T)
                 
-                # Calculer la distance euclidienne globale (toutes dimensions)
+                # Compute the global Euclidean distance (all dimensions)
                 X1_scaled = X1 / lengthscales
                 X2_scaled = X2 / lengthscales
                 
@@ -487,11 +487,11 @@ class Matern32Kernel(Kernel):
                 dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1_scaled, X2_scaled.T)
                 dist = np.sqrt(np.maximum(dist_sq, 1e-36))
                 
-                # Calcul du noyau Matern 3/2
+                # Compute the Matern 3/2 kernel
                 scaled_dist = np.sqrt(3) * dist
                 base = (1.0 + scaled_dist) * np.exp(-scaled_dist)
                 
-                # Calculer la contribution au gradient pour cette dimension
+                # Compute the gradient contribution for this dimension
                 with np.errstate(divide='ignore', invalid='ignore'):
                     grad_coef = np.where(
                         dist > 1e-6,
@@ -502,19 +502,19 @@ class Matern32Kernel(Kernel):
                 dK_dlog_lengthscale_d = variance * np.exp(-scaled_dist) * grad_coef
                 gradients.append(dK_dlog_lengthscale_d)
         else:
-            # Cas isotropique: un seul gradient
+            # Isotropic case: a single gradient
             lengthscale = lengthscales[0]
             
-            # Calculer la distance euclidienne
+            # Compute the Euclidean distance
             X1_norm = np.sum(X1**2, axis=1).reshape(-1, 1)
             X2_norm = np.sum(X2**2, axis=1).reshape(1, -1)
             dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1, X2.T)
             dist = np.sqrt(np.maximum(dist_sq, 1e-36))
             
-            # Calcul du noyau Matern 3/2
+            # Compute the Matern 3/2 kernel
             scaled_dist = np.sqrt(3) * dist / lengthscale
             
-            # Gradient par rapport à log(lengthscale)
+            # Gradient with respect to log(lengthscale)
             dK_dlog_lengthscale = variance * scaled_dist**2 * np.exp(-scaled_dist)
             gradients.append(dK_dlog_lengthscale)
         
@@ -522,19 +522,19 @@ class Matern32Kernel(Kernel):
 
 
 class Matern12Kernel(Kernel):
-    """Noyau Matern 1/2 avec support pour anisotropie."""
+    """Matern 1/2 kernel with anisotropy support."""
     
     def __init__(self, input_dim: int, lengthscale=None, ARD=True):
         """
-        Initialise le noyau Matern 1/2.
+        Initializes the Matern 1/2 kernel.
         
         Args:
-            input_dim: Dimension des entrées
-            lengthscale: Échelle de longueur initiale. Si None, initialisé à 1.0
-                         Si c'est un scalaire, utilisé pour toutes les dimensions si ARD=False,
-                         ou comme valeur initiale pour toutes les dimensions si ARD=True
-                         Si c'est un tableau, doit avoir une longueur égale à input_dim pour ARD=True
-            ARD: Si True, utilise un lengthscale différent pour chaque dimension (Automatic Relevance Determination)
+            input_dim: Input dimension
+            lengthscale: Initial length scale. If None, initialized to 1.0
+                         If scalar, used for all dimensions if ARD=False,
+                         or as initial value for all dimensions if ARD=True
+                         If array, must have a length equal to input_dim for ARD=True
+            ARD: If True, uses a different length scale for each dimension (Automatic Relevance Determination)
         """
         super().__init__(input_dim)
         
@@ -542,17 +542,17 @@ class Matern12Kernel(Kernel):
         len_lengthscale = input_dim if ARD else 1
         
         if lengthscale is None:
-            # Initialisation par défaut
-            self._params = np.zeros(len_lengthscale)  # log(1.0) = 0 pour toutes les dimensions
+            # Default initialization
+            self._params = np.zeros(len_lengthscale)  # log(1.0) = 0 for all dimensions
         elif np.isscalar(lengthscale):
-            # Scalaire unique fourni
+            # Single scalar provided
             self._params = np.ones(len_lengthscale) * np.log(lengthscale)
         else:
-            # Tableau de lengthscales fourni
+            # Array of lengthscales provided
             if ARD and len(lengthscale) != input_dim:
-                raise ValueError(f"Pour ARD=True, lengthscale doit avoir {input_dim} éléments")
+                raise ValueError(f"For ARD=True, lengthscale must have {input_dim} elements")
             elif not ARD and len(lengthscale) > 1:
-                print(f"Attention: ARD=False mais lengthscale a {len(lengthscale)} éléments. Seul le premier sera utilisé.")
+                print(f"Warning: ARD=False but lengthscale has {len(lengthscale)} elements. Only the first one will be used.")
                 self._params = np.array([np.log(lengthscale[0])])
             else:
                 self._params = np.log(np.array(lengthscale))
@@ -561,47 +561,47 @@ class Matern12Kernel(Kernel):
     
     def __call__(self, X1: np.ndarray, X2: np.ndarray = None) -> np.ndarray:
         """
-        Calcule la matrice de covariance K(X1, X2) pour le noyau Matern 1/2 anisotropique.
+        Computes the covariance matrix K(X1, X2) for the anisotropic Matern 1/2 kernel.
         
         Args:
-            X1: Matrice de forme (n1, input_dim)
-            X2: Matrice de forme (n2, input_dim), si None, X2 = X1
+            X1: Matrix of shape (n1, input_dim)
+            X2: Matrix of shape (n2, input_dim), if None, X2 = X1
             
         Returns:
-            Matrice de covariance de forme (n1, n2)
+            Covariance matrix of shape (n1, n2)
         """
         if X2 is None:
             X2 = X1
             
-        # Extraire les paramètres
+        # Extract parameters
         variance = 1.0
         lengthscales = np.exp(self._params)
         
-        # Pour le cas anisotropique (ARD=True)
+        # For the anisotropic case (ARD=True)
         if self.ARD:
-            # Pondérer chaque dimension par son lengthscale
+            # Weight each dimension by its lengthscale
             X1_scaled = X1 / lengthscales
             X2_scaled = X2 / lengthscales
             
-            # Calculer la distance euclidienne pondérée
+            # Compute the weighted squared Euclidean distance
             X1_norm = np.sum(X1_scaled**2, axis=1).reshape(-1, 1)
             X2_norm = np.sum(X2_scaled**2, axis=1).reshape(1, -1)
             dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1_scaled, X2_scaled.T)
             dist = np.sqrt(np.maximum(dist_sq, 1e-36))
             
-            # Calcul du noyau Matern 1/2 (exponentiel)
-            scaled_dist = dist  # Pour Matern 1/2, on utilise directement la distance
+            # Compute the Matern 1/2 kernel (exponential)
+            scaled_dist = dist  # For Matern 1/2, we directly use the distance
         else:
-            # Cas isotropique (ARD=False)
+            # Isotropic case (ARD=False)
             lengthscale = lengthscales[0]
             
-            # Calculer la distance euclidienne
+            # Compute the Euclidean distance
             X1_norm = np.sum(X1**2, axis=1).reshape(-1, 1)
             X2_norm = np.sum(X2**2, axis=1).reshape(1, -1)
             dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1, X2.T)
             dist = np.sqrt(np.maximum(dist_sq, 1e-36))
             
-            # Calcul du noyau Matern 1/2 (exponentiel)
+            # Compute the Matern 1/2 kernel (exponential)
             scaled_dist = dist / lengthscale
         
         K = variance * np.exp(-scaled_dist)
@@ -609,39 +609,39 @@ class Matern12Kernel(Kernel):
     
     def gradient(self, X1: np.ndarray, X2: np.ndarray = None) -> List[np.ndarray]:
         """
-        Calcule les dérivées de la matrice de covariance par rapport aux hyperparamètres.
+        Computes the derivatives of the covariance matrix with respect to the hyperparameters.
         
         Args:
-            X1: Matrice de forme (n1, input_dim)
-            X2: Matrice de forme (n2, input_dim), si None, X2 = X1
+            X1: Matrix of shape (n1, input_dim)
+            X2: Matrix of shape (n2, input_dim), if None, X2 = X1
             
         Returns:
-            Liste de matrices, chacune de forme (n1, n2) correspondant aux dérivées
-            par rapport à chaque hyperparamètre
+            List of matrices, each of shape (n1, n2) corresponding to the derivatives
+            with respect to each hyperparameter
         """
         if X2 is None:
             X2 = X1
             
-        # Extraire les paramètres
+        # Extract parameters
         variance = 1.0
         lengthscales = np.exp(self._params)
         
         gradients = []
         
         if self.ARD:
-            # Cas anisotropique: un gradient par dimension
+            # Anisotropic case: one gradient per dimension
             for d in range(self.input_dim):
-                # Créer des copies des matrices X1 et X2 pour cette dimension
+                # Create copies of X1 and X2 matrices for this dimension
                 X1_copy = X1.copy()
                 X2_copy = X2.copy()
                 
-                # Mettre à zéro toutes les dimensions sauf celle d'intérêt
+                # Zero out all dimensions except the one of interest
                 for dim in range(self.input_dim):
                     if dim != d:
                         X1_copy[:, dim] = 0
                         X2_copy[:, dim] = 0
                 
-                # Calculer la distance euclidienne pour cette dimension uniquement
+                # Compute the Euclidean distance for this dimension only
                 X1_d_scaled = X1_copy / lengthscales[d]
                 X2_d_scaled = X2_copy / lengthscales[d]
                 
@@ -649,7 +649,7 @@ class Matern12Kernel(Kernel):
                 X2_d_norm = np.sum(X2_d_scaled**2, axis=1).reshape(1, -1)
                 dist_d_sq = X1_d_norm + X2_d_norm - 2.0 * np.dot(X1_d_scaled, X2_d_scaled.T)
                 
-                # Calculer la distance euclidienne globale (toutes dimensions)
+                # Compute the global Euclidean distance (all dimensions)
                 X1_scaled = X1 / lengthscales
                 X2_scaled = X2 / lengthscales
                 
@@ -658,10 +658,10 @@ class Matern12Kernel(Kernel):
                 dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1_scaled, X2_scaled.T)
                 dist = np.sqrt(np.maximum(dist_sq, 1e-36))
                 
-                # Calcul du noyau Matern 1/2 (exponentiel)
+                # Compute the Matern 1/2 kernel (exponential)
                 scaled_dist = dist
                 
-                # Calculer la contribution au gradient pour cette dimension
+                # Compute the gradient contribution for this dimension
                 with np.errstate(divide='ignore', invalid='ignore'):
                     grad_coef = np.where(
                         dist > 1e-6,
@@ -672,19 +672,19 @@ class Matern12Kernel(Kernel):
                 dK_dlog_lengthscale_d = variance * np.exp(-scaled_dist) * grad_coef
                 gradients.append(dK_dlog_lengthscale_d)
         else:
-            # Cas isotropique: un seul gradient
+            # Isotropic case: a single gradient
             lengthscale = lengthscales[0]
             
-            # Calculer la distance euclidienne
+            # Compute the Euclidean distance
             X1_norm = np.sum(X1**2, axis=1).reshape(-1, 1)
             X2_norm = np.sum(X2**2, axis=1).reshape(1, -1)
             dist_sq = X1_norm + X2_norm - 2.0 * np.dot(X1, X2.T)
             dist = np.sqrt(np.maximum(dist_sq, 1e-36))
             
-            # Calcul du noyau Matern 1/2 (exponentiel)
+            # Compute the Matern 1/2 kernel (exponential)
             scaled_dist = dist / lengthscale
             
-            # Gradient par rapport à log(lengthscale)
+            # Gradient with respect to log(lengthscale)
             dK_dlog_lengthscale = variance * scaled_dist * np.exp(-scaled_dist)
             gradients.append(dK_dlog_lengthscale)
         

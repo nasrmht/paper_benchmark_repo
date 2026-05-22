@@ -393,8 +393,8 @@ def _plot_metric_rows(
                              label=lbl)
 
     def _colmajor(items, ncol):
-        """Permute items so que l'affichage row-major de matplotlib
-        donne visuellement ncol colonnes remplies de haut en bas."""
+        """Permute items so that the row-major display of matplotlib
+        visually gives ncol columns filled from top to bottom."""
         if not items:
             return []
         nrow = -(-len(items) // ncol)     # ceil division

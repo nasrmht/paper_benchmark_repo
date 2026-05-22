@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Script de visualisation pour générer des figures adaptées pour un poster.
-Ce script génère, pour chaque métrique (Q2, RRMSE, interval_len), 
-un graphique contenant 3 subplots (un pour chaque sortie: f1, f2, f3).
-Chaque subplot compare les violonplots des 3 modèles (MOGP, Indep, LCM) 
-en fonction de la taille de l'ensemble d'entraînement N.
-Les figures sont sauvegardées en format SVG avec une police et taille adaptées.
+Visualization script to generate figures suitable for a poster.
+This script generates, for each metric (Q2, RRMSE, interval_len), 
+a plot containing 3 subplots (one for each output: f1, f2, f3).
+Each subplot compares the violin plots of the 3 models (MOGP, Indep, LCM) 
+based on the size of the training set N.
+The figures are saved in SVG format with appropriate font and size.
 """
 
 import numpy as np
@@ -15,7 +15,7 @@ import os
 import glob
 import matplotlib.patches as mpatches
 
-# Configuration globale pour poster
+# Global configuration for poster
 plt.rcParams.update({
     'font.size': 13,
     'axes.titlesize': 16,
@@ -49,7 +49,7 @@ METRIC_LABELS = {
 
 
 def load_and_aggregate_results(results_dir="results_c"):
-    """Charge et agrège les résultats des benchmarks."""
+    """Loads and aggregates benchmark results."""
     print(f"Loading results from {results_dir}...")
     pattern = os.path.join(results_dir, "benchmark_complet_seed=*.pkl")
     files = glob.glob(pattern)
@@ -100,14 +100,14 @@ def load_and_aggregate_results(results_dir="results_c"):
 
 def plot_metric_for_poster(results, metric, poster_dir):
     """
-    Génère 3 graphiques (un pour chaque sortie f1, f2, f3) pour une métrique donnée.
-    Chaque graphique contient 3 subplots correspondant aux contextes d'inférence 
-    (déduction de f1, f2, f3).
+    Generates 3 plots (one for each output f1, f2, f3) for a given metric.
+    Each plot contains 3 subplots corresponding to the inference contexts 
+    (deduction of f1, f2, f3).
     """
     n_list = sorted(results.keys())
     
     for output_idx, output_name in enumerate(OUTPUT_NAMES):
-        # Prépare la figure: 1 ligne, 3 colonnes pour les scénarios de déduction
+        # Prepare the figure: 1 row, 3 columns for deduction scenarios
         fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharey=True)
        # fig.suptitle(f'Comparaison pour {metric.upper()} - Sortie: {output_name}', fontweight='bold', y=1.05)
         
@@ -146,7 +146,7 @@ def plot_metric_for_poster(results, metric, poster_dir):
                     xtick_positions.append(np.mean(group_positions))
                     xtick_labels.append(f'N={n}')
                 
-                pos += 1  # Espace entre groupes
+                pos += 1  # Space between groups
             
             if all_data:
                 parts = ax.violinplot(all_data, positions=all_positions, widths=0.8,
@@ -183,7 +183,7 @@ def plot_metric_for_poster(results, metric, poster_dir):
             if metric in ['rrmse', 'interval_len']:
                 ax.set_yscale('log')
                 
-        # Légende
+        # Legend
         handles = [mpatches.Patch(color=COLORS['mogp'], label='CMoGP'),
                    mpatches.Patch(color=COLORS['indep'], label='Indep. GP'),
                    mpatches.Patch(color=COLORS['lcm'], label='LCM')]
@@ -191,41 +191,41 @@ def plot_metric_for_poster(results, metric, poster_dir):
         fig.legend(handles=handles, loc='lower center', ncol=3, bbox_to_anchor=(0.5, -0.1), frameon=True, edgecolor='black')
         
         plt.tight_layout()
-        output_name_clean = output_name.split()[0] # ex: f1
+        output_name_clean = output_name.split()[0] # e.g. f1
         save_path = os.path.join(poster_dir, f'poster2_{metric}_{output_name_clean}.pdf')
         plt.savefig(save_path, format='pdf', bbox_inches='tight')
         plt.close(fig)
-        print(f"Graphique sauvegardé: {save_path}")
+        print(f"Plot saved: {save_path}")
 
 
 def main():
-    # Déterminer le dossier des résultats
-    # Comme on est dans scripts/, les résultats sont deux niveaux au-dessus si on suit l'arborescence,
-    # mais gérons les deux cas (exécution depuis scripts/ ou depuis rapport_comparaison/).
+    # Determine results directory
+    # Since we are in scripts/, the results are two levels up following the folder structure,
+    # but let's handle both cases (running from scripts/ or from rapport_comparaison/).
     base_dir = os.path.dirname(os.path.abspath(__file__))
     results_dir = os.path.join(base_dir, '..', 'results', 'constraint_benchmark')
 
     results = load_and_aggregate_results(results_dir)
 
     if not results:
-        print("Aucun résultat trouvé ou chargé.")
+        print("No results found or loaded.")
         return
 
-    # Créer le dossier pour les figures
+    # Create the folder for figures
     poster_dir = os.path.join(base_dir, 'figures')
     os.makedirs(poster_dir, exist_ok=True)
     
     print("\n" + "="*60)
-    print("GÉNÉRATION DES FIGURES SVG (PAR SORTIE) POUR LE POSTER")
+    print("GENERATING SVG FIGURES (PER OUTPUT) FOR THE POSTER")
     print("="*60)
     
     for metric in METRICS:
-        print(f"\nGénérant les plots pour {metric}...")
+        print(f"\nGenerating plots for {metric}...")
         plot_metric_for_poster(results, metric, poster_dir)
         
     print("\n" + "="*60)
-    print("Toutes les figures ont été générées avec succès!")
-    print(f"Dossier de sortie: {poster_dir}")
+    print("All figures have been generated successfully!")
+    print(f"Output directory: {poster_dir}")
     print("="*60)
 
 

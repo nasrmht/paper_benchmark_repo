@@ -314,7 +314,7 @@ class BenchmarkRunner:
                 intermediate.update(pca_err_tr)
                 intermediate.update(pca_err_te)
                 intermediate.update(latent_inter)
-                # Reconstruction cumulative k=1..M avec déduction du champ p
+                # Cumulative reconstruction k=1..M with deduction of field p
                 cum = model._reducer.cumulative_reconstruction_error(
                     self._fields_test_c, self._means_train, "test",
                     fixed_idx=p, u=self.dataset.constraint_vector,
@@ -394,8 +394,8 @@ class BenchmarkRunner:
         for model in (optimized_models or []):
             self._run_optimized_model(model)
 
-        # Libérer les workers joblib/loky créés par les bibliothèques GP
-        # Évite les 65 "leaked folder objects" et le délai au shutdown Python
+        # Release the joblib/loky workers created by the GP libraries
+        # Avoids the 65 "leaked folder objects" and the delay at Python shutdown
         try:
             from joblib.externals.loky import get_reusable_executor
             get_reusable_executor().shutdown(wait=True, kill_workers=True)

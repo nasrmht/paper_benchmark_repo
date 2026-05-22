@@ -17,14 +17,14 @@ from ..benchmark.storage import open_storage
 
 
 # ---------------------------------------------------------------------------
-# Helpers internes
+# Internal helpers
 # ---------------------------------------------------------------------------
 
 def _short_label(model_name: str) -> str:
-    """Étiquette courte pour les axes de graphiques.
+    """Short label for plot axes.
 
-    Exemples : RC_ConstMOGP_M5 → 'RC M5'
-               CI_SOGP_M5_p2   → 'CI p=2'
+    Examples: RC_ConstMOGP_M5 → 'RC M5'
+              CI_SOGP_M5_p2   → 'CI p=2'
     """
     parts = model_name.split("_")
     prefix = parts[0]
@@ -41,10 +41,10 @@ def _per_mode_aggregate(
     pca_type: str,
     gp_type: str,
 ) -> tuple:
-    """Convertit les métriques latentes (forme variable) en vecteurs (M,).
+    """Converts latent metrics (variable shape) to vectors (M,).
 
-    - FI (FieldwisePCA + IndepSOGP) : forme (Q, M) → moyenne sur les Q champs
-    - Autres (RC / CI / FM)          : forme (M, q) → moyenne sur les q dims
+    - FI (FieldwisePCA + IndepSOGP): shape (Q, M) → average over Q fields
+    - Others (RC / CI / FM): shape (M, q) → average over q dimensions
     """
     if pca_type == "FieldwisePCA" and gp_type == "IndepSOGP":
         return lat_rmse.mean(axis=0), lat_q2.mean(axis=0)   # (M,)
@@ -53,15 +53,15 @@ def _per_mode_aggregate(
 
 
 # ---------------------------------------------------------------------------
-# ResultsAnalyzer — single-seed (inchangé pour compatibilité)
+# ResultsAnalyzer — single-seed (unchanged for compatibility)
 # ---------------------------------------------------------------------------
 
 class ResultsAnalyzer:
-    """Charge, tabule et visualise les résultats d'un seul fichier zarr.
+    """Loads, tabulates, and visualizes the results of a single zarr file.
 
     Parameters
     ----------
-    storage_path : chemin vers le zarr écrit par BenchmarkRunner
+    storage_path : path to the zarr file written by BenchmarkRunner
     """
 
     def __init__(self, storage_path: str):
@@ -69,7 +69,7 @@ class ResultsAnalyzer:
         self._df: Any = None
 
     # ------------------------------------------------------------------
-    # Données
+    # Data
     # ------------------------------------------------------------------
 
     def list_models(self) -> List[str]:
@@ -79,14 +79,14 @@ class ResultsAnalyzer:
         return self.storage.load_model_result(model_name)
 
     def to_dataframe(self, reload: bool = False):
-        """DataFrame avec une ligne par modèle.
+        """DataFrame with one row per model.
 
-        Colonnes : model_name, pca_type, gp_type, n_modes, fixed_idx,
-                   q2_f0…q2_fQ-1, rrmse_f0…rrmse_fQ-1,
-                   iw_f0…iw_fQ-1, constraint_mean, constraint_max, fit_time_s.
+        Columns: model_name, pca_type, gp_type, n_modes, fixed_idx,
+                 q2_f0...q2_fQ-1, rrmse_f0...rrmse_fQ-1,
+                 iw_f0...iw_fQ-1, constraint_mean, constraint_max, fit_time_s.
         """
         if not _HAS_PANDAS:
-            raise ImportError("pandas est requis pour to_dataframe()")
+            raise ImportError("pandas is required for to_dataframe()")
         if self._df is not None and not reload:
             return self._df
 
@@ -122,14 +122,14 @@ class ResultsAnalyzer:
         return self._df
 
     # ------------------------------------------------------------------
-    # Résumé
+    # Summary
     # ------------------------------------------------------------------
 
     def print_summary(self) -> None:
-        """Tableau compact : modèles × métriques principales."""
+        """Compact table: models × main metrics."""
         models = self.list_models()
         if not models:
-            print("Aucun modèle trouvé.")
+            print("No model found.")
             return
 
         Q = self.storage.get_n_outputs()
@@ -154,7 +154,7 @@ class ResultsAnalyzer:
             print(row)
 
     # ------------------------------------------------------------------
-    # Graphiques (mono-seed)
+    # Plots (mono-seed)
     # ------------------------------------------------------------------
 
     def plot_rrmse_vs_modes(
@@ -163,9 +163,9 @@ class ResultsAnalyzer:
         model_types: Optional[List[str]] = None,
         ax: Optional[plt.Axes] = None,
     ) -> plt.Figure:
-        """RRMSE vs nombre de modes PCA pour un champ de sortie donné."""
+        """RRMSE vs number of PCA modes for a given output field."""
         if not _HAS_PANDAS:
-            raise ImportError("pandas requis")
+            raise ImportError("pandas required")
         df  = self.to_dataframe()
         fig, ax = (plt.subplots() if ax is None else (ax.get_figure(), ax))
         col = f"rrmse_f{field_idx}"
@@ -174,9 +174,9 @@ class ResultsAnalyzer:
                 continue
             sub = group.sort_values("n_modes")
             ax.plot(sub["n_modes"], sub[col], marker="o", label=label)
-        ax.set_xlabel("Nombre de modes PCA")
-        ax.set_ylabel(f"RRMSE (champ {field_idx})")
-        ax.set_title(f"RRMSE vs modes — champ {field_idx}")
+        ax.set_xlabel("Number of PCA modes")
+        ax.set_ylabel(f"RRMSE (field {field_idx})")
+        ax.set_title(f"RRMSE vs modes — field {field_idx}")
         ax.legend(fontsize=7, bbox_to_anchor=(1.02, 1), loc="upper left")
         fig.tight_layout()
         return fig
@@ -187,9 +187,9 @@ class ResultsAnalyzer:
         fixed_idx: Optional[int] = None,
         ax: Optional[plt.Axes] = None,
     ) -> plt.Figure:
-        """Diagramme en barres : Q² par champ de sortie et par modèle."""
+        """Bar chart: Q² per output field and per model."""
         if not _HAS_PANDAS:
-            raise ImportError("pandas requis")
+            raise ImportError("pandas required")
         df = self.to_dataframe()
         if n_modes is not None:
             df = df[df["n_modes"] == n_modes]
@@ -210,7 +210,7 @@ class ResultsAnalyzer:
         ax.set_xticklabels([f"f{i}" for i in range(Q)])
         ax.set_ylim(0, 1.05)
         ax.set_ylabel("Q²")
-        ax.set_title("Q² par champ de sortie")
+        ax.set_title("Q² per output field")
         ax.legend(fontsize=7, bbox_to_anchor=(1.02, 1), loc="upper left")
         fig.tight_layout()
         return fig
@@ -218,7 +218,7 @@ class ResultsAnalyzer:
     def plot_constraint_satisfaction(
         self, ax: Optional[plt.Axes] = None
     ) -> plt.Figure:
-        """Barres : violation max de la contrainte par modèle."""
+        """Bars: max constraint violation per model."""
         models = self.list_models()
         names, vals = [], []
         for name in sorted(models):
@@ -234,7 +234,7 @@ class ResultsAnalyzer:
         ax.set_xticks(range(len(names)))
         ax.set_xticklabels(names, fontsize=7)
         ax.set_ylabel("Max |u.T @ f|")
-        ax.set_title("Satisfaction de la contrainte")
+        ax.set_title("Constraint satisfaction")
         ax.set_yscale("log")
         fig.tight_layout()
         return fig
@@ -245,9 +245,9 @@ class ResultsAnalyzer:
         field_idx: int = 0,
         n_modes: Optional[int] = None,
     ):
-        """DataFrame trié pour une métrique et un champ donné."""
+        """Sorted DataFrame for a given metric and field."""
         if not _HAS_PANDAS:
-            raise ImportError("pandas requis")
+            raise ImportError("pandas required")
         df  = self.to_dataframe()
         col = f"{metric}_f{field_idx}"
         if n_modes is not None:
@@ -257,18 +257,18 @@ class ResultsAnalyzer:
 
 
 # ---------------------------------------------------------------------------
-# MultiSeedAnalyzer — agrégation multi-seeds
+# MultiSeedAnalyzer — multi-seeds aggregation
 # ---------------------------------------------------------------------------
 
 class MultiSeedAnalyzer:
-    """Agrège les résultats de plusieurs fichiers zarr (un par seed).
+    """Aggregates the results of multiple zarr files (one per seed).
 
     Parameters
     ----------
-    paths : liste de chemins zarr, glob pattern (ex: "results_lv_seed*.zarr"),
-            ou chemin unique.
+    paths : list of zarr paths, glob pattern (e.g. "results_lv_seed*.zarr"),
+            or a single path.
 
-    Exemples
+    Examples
     --------
     >>> ana = MultiSeedAnalyzer("results_lv_seed*.zarr")
     >>> ana = MultiSeedAnalyzer(["results_lv_seed0.zarr", "results_lv_seed1.zarr"])
@@ -281,12 +281,12 @@ class MultiSeedAnalyzer:
             else:
                 paths = [paths]
         if not paths:
-            raise ValueError("Aucun fichier de résultats trouvé.")
+            raise ValueError("No results file found.")
 
         self.paths = list(paths)
         self._analyzers = [ResultsAnalyzer(p) for p in self.paths]
 
-        # Extraire le seed depuis le config stocké ou depuis le nom de fichier
+        # Extract the seed from the stored config or from the filename
         self._seeds: List[int] = []
         for p, a in zip(self.paths, self._analyzers):
             try:
@@ -302,20 +302,20 @@ class MultiSeedAnalyzer:
         self._df_per_mode: Any = None
 
     # ------------------------------------------------------------------
-    # Données
+    # Data
     # ------------------------------------------------------------------
 
     def list_models(self) -> List[str]:
-        """Liste des noms de modèles (depuis le premier zarr)."""
+        """List of model names (from the first zarr)."""
         return self._analyzers[0].list_models()
 
     def to_dataframe(self, reload: bool = False):
-        """DataFrame avec une ligne par (seed, modèle).
+        """DataFrame with one row per (seed, model).
 
-        Colonnes identiques à ResultsAnalyzer.to_dataframe() + colonne 'seed'.
+        Columns identical to ResultsAnalyzer.to_dataframe() + 'seed' column.
         """
         if not _HAS_PANDAS:
-            raise ImportError("pandas requis")
+            raise ImportError("pandas required")
         if self._df is not None and not reload:
             return self._df
 
@@ -328,16 +328,16 @@ class MultiSeedAnalyzer:
         return self._df
 
     def to_per_mode_dataframe(self, reload: bool = False):
-        """DataFrame avec une ligne par (seed, modèle, mode latent).
+        """DataFrame with one row per (seed, model, latent mode).
 
-        Colonnes : seed, model_name, pca_type, gp_type, n_modes, fixed_idx,
-                   mode_idx, mean_latent_q2, mean_latent_rmse.
+        Columns: seed, model_name, pca_type, gp_type, n_modes, fixed_idx,
+                 mode_idx, mean_latent_q2, mean_latent_rmse.
 
-        Seuls les modèles ayant des métriques intermédiaires latentes sont inclus.
-        La moyenne est prise sur les dimensions de sortie latentes (q).
+        Only models with intermediate latent metrics are included.
+        The average is taken over the latent output dimensions (q).
         """
         if not _HAS_PANDAS:
-            raise ImportError("pandas requis")
+            raise ImportError("pandas required")
         if self._df_per_mode is not None and not reload:
             return self._df_per_mode
 
@@ -373,13 +373,13 @@ class MultiSeedAnalyzer:
         return self._df_per_mode
 
     # ------------------------------------------------------------------
-    # Résumé
+    # Summary
     # ------------------------------------------------------------------
 
     def print_summary(self) -> None:
-        """Affiche mean ± std de Q² et RRMSE par modèle, sur tous les seeds."""
+        """Displays mean ± std of Q² and RRMSE per model, over all seeds."""
         if not _HAS_PANDAS:
-            # fallback sans pandas
+            # fallback without pandas
             for seed, ana in zip(self._seeds, self._analyzers):
                 print(f"--- seed={seed} ---")
                 ana.print_summary()
@@ -408,14 +408,14 @@ class MultiSeedAnalyzer:
             )
 
     # ------------------------------------------------------------------
-    # Graphiques de comparaison
+    # Comparison plots
     # ------------------------------------------------------------------
 
     # Palettes
-    _COLOR_RC   = "#2166ac"   # bleu
-    _COLOR_CI   = "#d6604d"   # rouge/orange
-    _COLOR_FI   = "#1a9641"   # vert
-    _COLOR_FM   = "#7b2d8b"   # violet
+    _COLOR_RC   = "#2166ac"   # blue
+    _COLOR_CI   = "#d6604d"   # red/orange
+    _COLOR_FI   = "#1a9641"   # green
+    _COLOR_FM   = "#7b2d8b"   # purple
     _COLORS_BY_PREFIX = {"RC": _COLOR_RC, "CI": _COLOR_CI,
                           "FI": _COLOR_FI, "FM": _COLOR_FM}
 
@@ -424,7 +424,7 @@ class MultiSeedAnalyzer:
         return sorted(c for c in df.columns if c.startswith("q2_f"))
 
     def _palette(self, names: List[str], base_color: str) -> List[str]:
-        """Dégradé de teintes autour de base_color pour distinguer les scénarios."""
+        """Gradient of tints around base_color to distinguish scenarios."""
         import colorsys
         r, g, b = tuple(int(base_color.lstrip("#")[i:i+2], 16) / 255
                         for i in (0, 2, 4))
@@ -443,19 +443,19 @@ class MultiSeedAnalyzer:
         figsize: Optional[tuple] = None,
         output_path: Optional[str] = None,
     ) -> plt.Figure:
-        """Violin plot comparatif de la distribution de Q² sur les seeds.
+        """Comparative violin plot of Q² distribution over seeds.
 
-        Figure 1×3 : [RC vs CI | RC vs FI | RC vs FM].
-        Chaque violin = distribution de Q² sur (seeds × champs de sortie).
+        Figure 1x3: [RC vs CI | RC vs FI | RC vs FM].
+        Each violin = distribution of Q² over (seeds x output fields).
 
         Parameters
         ----------
-        n_modes     : filtrer par nombre de modes (None = tous)
-        figsize     : taille de figure (défaut: (15, 5))
-        output_path : chemin pour sauvegarder la figure (None = ne pas sauver)
+        n_modes     : filter by number of modes (None = all)
+        figsize     : figure size (default: (15, 5))
+        output_path : path to save the figure (None = do not save)
         """
         if not _HAS_PANDAS:
-            raise ImportError("pandas requis")
+            raise ImportError("pandas required")
 
         df = self.to_dataframe()
         if n_modes is not None:
@@ -470,7 +470,7 @@ class MultiSeedAnalyzer:
 
         fig, axes = plt.subplots(1, 3, figsize=figsize or (15, 5), sharey=True)
         fig.suptitle(
-            "Distribution de Q² sur les seeds"
+            "Q² distribution over seeds"
             + (f"  [M={n_modes}]" if n_modes else ""),
             fontsize=13
         )
@@ -483,7 +483,7 @@ class MultiSeedAnalyzer:
 
             all_names = rc_names + comp_names
             if not all_names:
-                ax.set_title(title + "\n(aucune donnée)")
+                ax.set_title(title + "\n(no data)")
                 continue
 
             data_list, labels, colors = [], [], []
@@ -492,7 +492,7 @@ class MultiSeedAnalyzer:
 
             for name in rc_names:
                 sub = df[df["model_name"] == name]
-                # Distribution sur seeds × champs
+                # Distribution over seeds x fields
                 vals = sub[q2_cols].values.flatten()
                 data_list.append(vals)
                 labels.append(_short_label(name))
@@ -519,7 +519,7 @@ class MultiSeedAnalyzer:
                     parts[key].set_color("black")
                     parts[key].set_linewidth(1.2)
 
-            # Ligne de séparation RC / comp
+            # Separation line RC / comp
             if rc_names and comp_names:
                 ax.axvline(len(rc_names) - 0.5, color="gray",
                            linestyle="--", linewidth=0.8, alpha=0.6)
@@ -543,27 +543,27 @@ class MultiSeedAnalyzer:
         figsize: Optional[tuple] = None,
         output_path: Optional[str] = None,
     ) -> plt.Figure:
-        """RRMSE GP latent par mode, comparaison RC vs CI / FI / FM.
+        """Latent GP RRMSE per mode, comparison RC vs CI / FI / FM.
 
-        Figure 1×3 : chaque sous-graphe montre, pour chaque mode latent m,
-        la RRMSE moyenne du GP sur les poids latents (mean ± std sur les seeds).
+        Figure 1x3: each subplot shows, for each latent mode m,
+        the average RRMSE of the GP on the latent weights (mean ± std over seeds).
 
-        - RC : une courbe (pas de sortie fixée)
-        - CI / FI / FM : Q courbes, une par scénario (fixed_idx)
+        - RC: one curve (no fixed output)
+        - CI / FI / FM: Q curves, one per scenario (fixed_idx)
 
         Parameters
         ----------
-        n_modes     : filtrer par nombre de modes (None = tous)
-        figsize     : taille de figure (défaut: (15, 5))
-        output_path : chemin pour sauvegarder (None = ne pas sauver)
+        n_modes     : filter by number of modes (None = all)
+        figsize     : figure size (default: (15, 5))
+        output_path : path to save (None = do not save)
         """
         if not _HAS_PANDAS:
-            raise ImportError("pandas requis")
+            raise ImportError("pandas required")
 
         df_pm = self.to_per_mode_dataframe()
         if df_pm.empty:
-            print("Aucune métrique latente par mode trouvée. "
-                  "Vérifiez que intermediate_metrics est bien calculé.")
+            print("No latent metric per mode found. "
+                  "Verify that intermediate_metrics is correctly computed.")
             return plt.figure()
 
         if n_modes is not None:
@@ -577,7 +577,7 @@ class MultiSeedAnalyzer:
 
         fig, axes = plt.subplots(1, 3, figsize=figsize or (15, 5))
         fig.suptitle(
-            "RRMSE GP latent par mode"
+            "Latent GP RRMSE per mode"
             + (f"  [M={n_modes}]" if n_modes else ""),
             fontsize=13
         )
@@ -588,12 +588,12 @@ class MultiSeedAnalyzer:
             sub_all   = df_pm[rc_mask | comp_mask]
 
             if sub_all.empty:
-                ax.set_title(title + "\n(aucune donnée)")
+                ax.set_title(title + "\n(no data)")
                 continue
 
             all_names = sorted(sub_all["model_name"].unique())
             mode_indices = sorted(sub_all["mode_idx"].unique())
-            x = np.array(mode_indices) + 1   # 1-indexé
+            x = np.array(mode_indices) + 1   # 1-indexed
 
             base_comp_color = self._COLORS_BY_PREFIX.get(comp_prefix, "gray")
             rc_names   = [n for n in all_names if n.startswith("RC_")]
@@ -616,22 +616,22 @@ class MultiSeedAnalyzer:
             for name in rc_names:
                 _plot_model(name, self._COLOR_RC, "-")
 
-            # FI : tous les scénarios p partagent les mêmes métriques latentes
-            # (tous les Q champs sont entraînés) → on n'affiche qu'une seule ligne
+            # FI: all scenarios p share the same latent metrics
+            # (all Q fields are trained) → we only display a single line
             if comp_prefix == "FI":
-                # Choisir le premier scénario comme représentant
+                # Choose the first scenario as representative
                 rep = comp_names[0] if comp_names else None
                 if rep:
                     _plot_model(rep, base_comp_color, "--")
-                    ax.text(0.97, 0.97, "FI : métriques identiques\npour tous p",
+                    ax.text(0.97, 0.97, "FI: identical metrics\nfor all p",
                             transform=ax.transAxes, fontsize=7,
                             ha="right", va="top", color="gray")
             else:
                 for i, name in enumerate(comp_names):
                     _plot_model(name, comp_palette[i], "--")
 
-            ax.set_xlabel("Mode latent m")
-            ax.set_ylabel("RRMSE latent moyen" if ax == axes[0] else "")
+            ax.set_xlabel("Latent mode m")
+            ax.set_ylabel("Mean latent RRMSE" if ax == axes[0] else "")
             ax.set_title(title, fontsize=10)
             ax.set_xticks(x)
             ax.legend(fontsize=7, loc="upper right")
@@ -648,32 +648,32 @@ class MultiSeedAnalyzer:
         figsize: Optional[tuple] = None,
         output_path: Optional[str] = None,
     ) -> plt.Figure:
-        """Q² et RRMSE de reconstruction PCA en fonction du nombre de modes retenus.
+        """PCA reconstruction Q² and RRMSE as a function of the number of retained modes.
 
-        Pour chaque modèle à M modes, montre comment la qualité de reconstruction
-        des champs évolue quand on reconstruit avec k = 1, 2, …, M modes.
-        Les métriques sont moyennées sur les seeds ; la barre d'erreur = ± std sur les seeds.
-        Tous les scénarios d'un même modèle (même préfixe) partagent le même style de trait,
-        tandis que la couleur de fond et des contours est définie par l'indice `fixed_idx` (p).
+        For each M-mode model, shows how the field reconstruction quality
+        evolves when reconstructing with k = 1, 2, ..., M modes.
+        Metrics are averaged over seeds; error bar = ± std over seeds.
+        All scenarios of the same model (same prefix) share the same line style,
+        while the background and edge colors are defined by the `fixed_idx` (p) index.
 
-        Figure (Q lignes × 2 colonnes) :
-          - colonne gauche  : Q² de reconstruction PCA
-          - colonne droite  : RRMSE de reconstruction PCA
-          - diagramme en barres empilées/décalées par scénario.
+        Figure (Q rows x 2 columns):
+          - left column  : PCA reconstruction Q²
+          - right column : PCA reconstruction RRMSE
+          - stacked/shifted bar chart per scenario.
 
         Parameters
         ----------
-        n_modes     : filtrer par nombre de modes (None = tous ; si plusieurs
-                      valeurs existent, seule la première est utilisée)
-        figsize     : taille de la figure (défaut : (14, 4*Q))
-        output_path : chemin de sauvegarde (None = ne pas sauver)
+        n_modes     : filter by number of modes (None = all; if multiple
+                      values exist, only the first is used)
+        figsize     : figure size (default: (14, 4*Q))
+        output_path : save path (None = do not save)
         """
         if not _HAS_PANDAS:
-            raise ImportError("pandas requis")
+            raise ImportError("pandas required")
 
-        # ── Collecte des données ─────────────────────────────────────────────
-        # Pour chaque (seed, modèle), on lit cumulative_q2_test (M, Q)
-        # et cumulative_rrmse_test (M, Q) depuis l'intermediate.
+        # ── Data Collection ─────────────────────────────────────────────
+        # For each (seed, model), we read cumulative_q2_test (M, Q)
+        # and cumulative_rrmse_test (M, Q) from intermediate.
         records = []
         for seed, ana in zip(self._seeds, self._analyzers):
             for name in ana.list_models():
@@ -696,24 +696,24 @@ class MultiSeedAnalyzer:
 
         if not records:
             print(
-                "[MultiSeedAnalyzer] Aucune donnée cumulative PCA trouvée. "
-                "Relancez le benchmark pour peupler 'cumulative_q2_test'."
+                "[MultiSeedAnalyzer] No cumulative PCA data found. "
+                "Rerun the benchmark to populate 'cumulative_q2_test'."
             )
             return plt.figure()
 
-        # ── Filtrage n_modes ─────────────────────────────────────────────────
+        # ── Filtering n_modes ─────────────────────────────────────────────────
         all_n_modes = sorted({r["n_modes"] for r in records if not np.isnan(r["n_modes"])})
         if n_modes is not None:
             records = [r for r in records if r["n_modes"] == n_modes]
         elif len(all_n_modes) > 1:
             n_modes = all_n_modes[0]
             records = [r for r in records if r["n_modes"] == n_modes]
-            print(f"[MultiSeedAnalyzer] Plusieurs n_modes trouvés {all_n_modes}. "
-                  f"Affichage de n_modes={n_modes}. "
-                  "Passez n_modes= pour en choisir un autre.")
+            print(f"[MultiSeedAnalyzer] Multiple n_modes found {all_n_modes}. "
+                  f"Displaying n_modes={n_modes}. "
+                  "Pass n_modes= to choose another one.")
 
         if not records:
-            print(f"[MultiSeedAnalyzer] Aucun modèle avec n_modes={n_modes}.")
+            print(f"[MultiSeedAnalyzer] No model with n_modes={n_modes}.")
             return plt.figure()
 
         M_max = max(r["cum_q2"].shape[0] for r in records)
@@ -729,15 +729,15 @@ class MultiSeedAnalyzer:
 
         n_modes_label = f"  [M={n_modes}]" if n_modes else ""
         fig.suptitle(
-            f"Qualité de reconstruction PCA en fonction des modes retenus{n_modes_label}",
+            f"PCA reconstruction quality as a function of the number of retained modes{n_modes_label}",
             fontsize=13,
         )
 
-        # Scénarios uniques = (prefix, fixed_idx)
+        # Unique scenarios = (prefix, fixed_idx)
         scenarios = sorted(list(set((r["prefix"], r["fixed_idx"]) for r in records)))
         n_scenarios = len(scenarios)
 
-        # Association Couleur <-> fixed_idx
+        # Color <-> fixed_idx Association
         unique_p = sorted(list(set(r["fixed_idx"] for r in records)))
         color_map = {}
         cmap = plt.get_cmap("tab10")
@@ -750,7 +750,7 @@ class MultiSeedAnalyzer:
                 color_map[p] = cmap(color_idx % 10)
                 color_idx += 1
 
-        # Association Linestyle <-> prefix
+        # Linestyle <-> prefix Association
         linestyle_map = {
             "RC": "-",
             "CI": "--",
@@ -758,7 +758,7 @@ class MultiSeedAnalyzer:
             "FM": "-."
         }
 
-        # Largeur de barre de base totale et par scénario
+        # Total base bar width and per scenario
         total_width = 0.8
         w = total_width / max(1, n_scenarios)
 
@@ -786,7 +786,7 @@ class MultiSeedAnalyzer:
                 M_cur = seed_q2.shape[1]
                 x_cur = np.arange(1, M_cur + 1)
                 
-                # Décalage pour le barplot
+                # Offset for the barplot
                 offset = (s_idx - n_scenarios / 2.0 + 0.5) * w
                 x_pos = x_cur + offset
 
@@ -809,8 +809,8 @@ class MultiSeedAnalyzer:
             ax_rr.set_ylabel(f"RRMSE  —  f{i}", fontsize=9)
 
             if i == 0:
-                ax_q2.set_title("Q² PCA  (mean ± std sur seeds)", fontsize=10)
-                ax_rr.set_title("RRMSE PCA  (mean ± std sur seeds)", fontsize=10)
+                ax_q2.set_title("Q² PCA  (mean ± std over seeds)", fontsize=10)
+                ax_rr.set_title("RRMSE PCA  (mean ± std over seeds)", fontsize=10)
 
             for ax in (ax_q2, ax_rr):
                 ax.grid(axis="y", linestyle=":", alpha=0.5)
@@ -821,7 +821,7 @@ class MultiSeedAnalyzer:
                 ax.set_xticks(x[:M_max])
 
         for ax in axes[-1, :]:
-            ax.set_xlabel("Nombre de modes retenus k")
+            ax.set_xlabel("Number of retained modes k")
 
         fig.tight_layout()
         if output_path:
@@ -836,31 +836,31 @@ class MultiSeedAnalyzer:
         figsize: Optional[tuple] = None,
         output_path: Optional[str] = None,
     ) -> plt.Figure:
-        """Q² et RRMSE des prédictions finales en fonction du nombre de modes latent k.
+        """Q² and RRMSE of final predictions as a function of the number of latent modes k.
 
-        Pour chaque modèle à M modes, cette fonction montre la qualité de prédiction 
-        cumulative : on reconstruit le champ en utilisant les k premières projections gp
-        (prédites) et on compare ça aux champs de tests originaux. L'axe des `x`
-        représente le nombre de projections `k` (1 à M).
+        For each M-mode model, this function shows the cumulative prediction quality:
+        we reconstruct the field using the first k predicted GP projections
+        and compare that to the original test fields. The `x` axis
+        represents the number of projections `k` (1 to M).
 
-        Figure (Q lignes × 2 colonnes) :
-          - colonne gauche  : Q² par champ de sortie
-          - colonne droite  : RRMSE par champ de sortie
-          - diagramme en barres empilées/décalées par scénario.
+        Figure (Q rows x 2 columns):
+          - left column  : Q² per output field
+          - right column : RRMSE per output field
+          - stacked/shifted bar chart per scenario.
 
-        Tous les scénarios d'un même modèle (même préfixe) partagent le même style de trait,
-        tandis que la couleur de fond et des contours est définie par l'indice `fixed_idx` (p).
+        All scenarios of the same model (same prefix) share the same line style,
+        while the background and edge colors are defined by the `fixed_idx` (p) index.
 
         Parameters
         ----------
-        n_modes       : filtrer par un nombre de modes d'entraînement.
-        model_types   : liste de préfixes à conserver (ex: ["RC", "FI"]). None = tous.
-        fixed_indices : liste de fixed_idx à conserver (ex: [-1, 0, 1]). None = tous.
-        figsize       : taille de la figure (défaut : (14, 4*Q))
-        output_path   : chemin de sauvegarde (None = ne pas sauver)
+        n_modes       : filter by a number of training modes.
+        model_types   : list of prefixes to keep (e.g. ["RC", "FI"]). None = all.
+        fixed_indices : list of fixed_idx to keep (e.g. [-1, 0, 1]). None = all.
+        figsize       : figure size (default: (14, 4*Q))
+        output_path   : save path (None = do not save)
         """
         if not _HAS_PANDAS:
-            raise ImportError("pandas requis")
+            raise ImportError("pandas required")
 
         records = []
         for seed, ana in zip(self._seeds, self._analyzers):
@@ -895,9 +895,9 @@ class MultiSeedAnalyzer:
 
         if not records:
             print(
-                "[MultiSeedAnalyzer] Aucune donnée cumulative *de prédiction* trouvée. "
-                "Assurez-vous que le modèle retourne 'predicted_weights' dans 'predictions' "
-                "et que le benchmark a été relancé."
+                "[MultiSeedAnalyzer] No cumulative *prediction* data found. "
+                "Ensure that the model returns 'predicted_weights' in 'predictions' "
+                "and that the benchmark has been rerun."
             )
             return plt.figure()
 
@@ -907,14 +907,14 @@ class MultiSeedAnalyzer:
         elif len(all_n_modes) > 1:
             n_modes = all_n_modes[0]
             records = [r for r in records if r["n_modes"] == n_modes]
-            print(f"[MultiSeedAnalyzer] Plusieurs n_modes entraînés trouvés {all_n_modes}. "
-                  f"Affichage de la prédiction cumulative pour le modèle avec n_modes={n_modes}. "
-                  "Passez n_modes= pour en choisir un autre.")
+            print(f"[MultiSeedAnalyzer] Multiple trained n_modes found {all_n_modes}. "
+                  f"Displaying cumulative prediction for the model with n_modes={n_modes}. "
+                  "Pass n_modes= to choose another one.")
         else:
             n_modes = all_n_modes[0]
 
         if not records:
-            print(f"[MultiSeedAnalyzer] Aucun modèle avec n_modes={n_modes}.")
+            print(f"[MultiSeedAnalyzer] No model with n_modes={n_modes}.")
             return plt.figure()
             
         M_max = max(r["cum_q2"].shape[0] for r in records)
@@ -928,11 +928,7 @@ class MultiSeedAnalyzer:
         )
         axes = np.array(axes).reshape(Q, 2)
 
-        n_modes_label = f"  [Modèles entraînés avec M={n_modes}]" if n_modes else ""
-        # fig.suptitle(
-        #     f"Qualité cumulative des PRÉDICTIONS GP en fonction du nombre de modes retenus k{n_modes_label}",
-        #     fontsize=13,
-        # )
+        n_modes_label = f"  [Models trained with M={n_modes}]" if n_modes else ""
 
         scenarios = sorted(list(set((r["prefix"], r["fixed_idx"]) for r in records)))
         n_scenarios = len(scenarios)
@@ -1005,8 +1001,8 @@ class MultiSeedAnalyzer:
             ax_rr.set_ylabel(f"RRMSE  —  f{i}", fontsize=9)
 
             if i == 0:
-                ax_q2.set_title("Q² Prédiction  (mean ± std sur seeds)", fontsize=10)
-                ax_rr.set_title("RRMSE Prédiction  (mean ± std sur seeds)", fontsize=10)
+                ax_q2.set_title("Q² Prediction  (mean ± std over seeds)", fontsize=10)
+                ax_rr.set_title("RRMSE Prediction  (mean ± std over seeds)", fontsize=10)
 
             for ax in (ax_q2, ax_rr):
                 ax.grid(axis="y", linestyle=":", alpha=0.5)
@@ -1018,7 +1014,7 @@ class MultiSeedAnalyzer:
                 ax.set_xticklabels([f"{nm:g}" for nm in x_positions[:M_max]])
 
         for ax in axes[-1, :]:
-            ax.set_xlabel("Nombre de modes retenus k pour reconstruire les prédictions finales")
+            ax.set_xlabel("Number of retained modes k to reconstruct final predictions")
 
         fig.tight_layout()
         if output_path:

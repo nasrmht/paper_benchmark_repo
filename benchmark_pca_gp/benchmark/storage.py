@@ -179,10 +179,10 @@ class ZarrBenchmarkStorage:
         return result
 
     def load_model_result_light(self, model_name: str) -> Dict[str, Any]:
-        """Charge config + métriques + intermédiaire SANS les prédictions.
+        """Loads config + metrics + intermediate WITHOUT predictions.
 
-        Beaucoup plus rapide que load_model_result() pour les résumés et
-        DataFrames qui n'ont pas besoin des tableaux (N_test, Q, S).
+        Much faster than load_model_result() for summaries and
+        DataFrames that do not need the arrays (N_test, Q, S).
         """
         grp = self.store[f"models/{model_name}"]
         met = grp["final"]["metrics"]

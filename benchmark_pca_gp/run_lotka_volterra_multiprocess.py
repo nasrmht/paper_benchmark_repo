@@ -1,30 +1,30 @@
-"""Benchmark Lotka-Volterra — exécution parallèle sur plusieurs seeds.
+"""Benchmark Lotka-Volterra — parallel execution over multiple seeds.
 
-Lance la même configuration de benchmark sur N seeds en parallèle via
-concurrent.futures.ProcessPoolExecutor.  Chaque seed écrit son propre
-fichier zarr : {storage_prefix}_seed{N}.zarr.
+Launches the same benchmark configuration on N seeds in parallel via
+concurrent.futures.ProcessPoolExecutor. Each seed writes its own
+zarr file: {storage_prefix}_seed{N}.zarr.
 
-Compatibilité
+Compatibility
 -------------
-Ce script est complémentaire de run_lotka_volterra.py :
-- run_lotka_volterra.py      → un seed, compatible cluster (sbatch / qsub)
-- run_lotka_volterra_multiprocess.py → plusieurs seeds en parallèle sur un PC
+This script complements run_lotka_volterra.py:
+- run_lotka_volterra.py      → single seed, cluster compatible (sbatch / qsub)
+- run_lotka_volterra_multiprocess.py → multiple seeds in parallel on a single machine
 
 Usage
 -----
-    # 10 seeds (0..9) en parallèle
+    # 10 seeds (0..9) in parallel
     python run_lotka_volterra_multiprocess.py --n_seeds 10
 
-    # Seeds explicites
+    # Explicit seeds
     python run_lotka_volterra_multiprocess.py --seeds 0 1 2 3 4
 
-    # Limiter le parallélisme
+    # Limit parallelism
     python run_lotka_volterra_multiprocess.py --n_seeds 10 --n_workers 4
 
-    # Benchmark comparatif (1 seul n_modes, 10 seeds)
+    # Comparative benchmark (1 single n_modes, 10 seeds)
     python run_lotka_volterra_multiprocess.py --n_seeds 10 --n_modes 5
 
-    # Mode rapide
+    # Quick mode
     python run_lotka_volterra_multiprocess.py --quick --n_seeds 3
 """
 import argparse
@@ -40,11 +40,11 @@ from benchmark_pca_gp.postprocessing.analysis import MultiSeedAnalyzer
 
 
 # ---------------------------------------------------------------------------
-# Worker (doit être au niveau module pour être picklable)
+# Worker (must be at module level to be picklable)
 # ---------------------------------------------------------------------------
 
 def _worker(args_tuple):
-    """Exécute run_benchmark pour un seed ; renvoie (seed, erreur|None)."""
+    """Runs run_benchmark for a seed; returns (seed, error|None)."""
     seed, storage_path, config, skip_existing = args_tuple
     try:
         run_benchmark(
@@ -66,37 +66,37 @@ def _worker(args_tuple):
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description="Benchmark LV — multi-seeds en parallèle"
+        description="Benchmark LV — multi-seeds in parallel"
     )
 
-    # --- Spécification des seeds ---
+    # --- Seed specification ---
     grp = p.add_mutually_exclusive_group()
     grp.add_argument("--seeds", nargs="+", type=int,
-                     help="Valeurs de seeds explicites (ex: 0 1 2 3 4)")
+                     help="Explicit seed values (e.g. 0 1 2 3 4)")
     grp.add_argument("--n_seeds", type=int, default=10,
-                     help="Nombre de seeds consécutifs (défaut: 10)")
+                     help="Number of consecutive seeds (default: 10)")
 
     p.add_argument("--seed_start", type=int, default=1,
-                   help="Premier seed quand --n_seeds est utilisé (défaut: 0)")
+                   help="First seed when --n_seeds is used (default: 0)")
     p.add_argument("--n_workers", type=int, default=None,
-                   help="Nombre de processus parallèles (défaut: n_cpu)")
+                   help="Number of parallel processes (default: n_cpu)")
 
-    # --- Configuration benchmark (identique à run_lotka_volterra.py) ---
+    # --- Benchmark configuration (identical to run_lotka_volterra.py) ---
     p.add_argument("--quick", action="store_true",
-                   help="Mode rapide (peu d'échantillons)")
+                   help="Quick mode (few samples)")
     p.add_argument("--storage_prefix", default="results_N_=30_lv",
-                   help="Préfixe des fichiers de résultats (défaut: results_lv)")
+                   help="Prefix of the results files (default: results_lv)")
     p.add_argument("--n_train",  type=int, default=None)
     p.add_argument("--n_total",  type=int, default=None)
     p.add_argument("--n_modes",  type=int, default=None,
-                   help="Forcer un seul n_modes (ex: 5 pour benchmark comparatif)")
+                   help="Force a single n_modes (e.g. 5 for comparative benchmark)")
     p.add_argument("--skip_existing", action="store_true")
     p.add_argument("--no_rc",  action="store_true")
     p.add_argument("--no_ci",  action="store_true")
     p.add_argument("--no_fi",  action="store_true")
     p.add_argument("--no_fm",  action="store_true")
     p.add_argument("--no_summary", action="store_true",
-                   help="Ne pas afficher le résumé agrégé à la fin")
+                   help="Do not display the aggregated summary at the end")
     return p.parse_args()
 
 
@@ -107,7 +107,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # Résoudre la liste de seeds
+    # Resolve the seed list
     if args.seeds:
         seeds = list(args.seeds)
     else:
@@ -116,8 +116,8 @@ def main():
     n_workers = args.n_workers or min(len(seeds), multiprocessing.cpu_count())
     storage_paths = [f"{args.storage_prefix}_seed{s}.zarr" for s in seeds]
 
-    # Construire la config en réutilisant build_benchmark_config
-    # (on simule un namespace argparse minimal)
+    # Build config by reusing build_benchmark_config
+    # (we simulate a minimal argparse namespace)
     class _Cfg:
         quick   = args.quick
         n_train = args.n_train
@@ -157,20 +157,20 @@ def main():
 
     print()
     if failed:
-        print(f"Seeds échoués : {failed}")
+        print(f"Failed seeds: {failed}")
         succeeded = [s for s in seeds if s not in failed]
     else:
-        print(f"Tous les {len(seeds)} seeds terminés avec succès.")
+        print(f"All {len(seeds)} seeds completed successfully.")
         succeeded = seeds
 
-    # Résumé agrégé multi-seeds
+    # Aggregated multi-seeds summary
     if not args.no_summary and succeeded:
         done_paths = [
             f"{args.storage_prefix}_seed{s}.zarr" for s in succeeded
         ]
         print()
         print("=" * 70)
-        print("RÉSUMÉ MULTI-SEEDS (mean ± std sur les seeds réussis)")
+        print("MULTI-SEEDS SUMMARY (mean ± std on successful seeds)")
         print("=" * 70)
         MultiSeedAnalyzer(done_paths).print_summary()
 

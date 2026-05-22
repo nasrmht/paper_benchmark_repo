@@ -105,13 +105,13 @@ class FixedOutputModel(SurrogateModel):
         fields_test_centered: List[np.ndarray],
         fields_train_centered: List[np.ndarray],
         means_train: List[np.ndarray],
-        _weights_test_norm=None,   # ignoré — calculé en interne
+        _weights_test_norm=None,   # ignored — computed internally
     ) -> Dict:
         """PCA reconstruction error + per-mode latent GP Q²/RMSE."""
         result = {}
 
-        # PCA reconstruction error — on encode les Q-1 champs non-fixés
-        # et on déduit le champ fixé via la contrainte (en passant fixed_idx et u)
+        # PCA reconstruction error — we encode the Q-1 non-fixed fields
+        # and deduce the fixed field via the constraint (passing fixed_idx and u)
         for split_name, fields_c in [("train", fields_train_centered),
                                       ("test",  fields_test_centered)]:
             Q = len(fields_c)
@@ -134,7 +134,7 @@ class FixedOutputModel(SurrogateModel):
                 rrmse[i] = np.sqrt(ss_res / (ss_tot + 1e-15))
             result[f"rrmse_per_field_{split_name}"] = rrmse
 
-        # Reconstruction PCA cumulative (k=1..M modes, champ fixé déduit)
+        # Cumulative PCA reconstruction (k=1..M modes, fixed field deduced)
         result.update(
             self.reducer.cumulative_reconstruction_error(
                 fields_test_centered, means_train, "test",
@@ -142,7 +142,7 @@ class FixedOutputModel(SurrogateModel):
             )
         )
 
-        # Métriques latentes GP par mode
+        # Latent GP metrics per mode
         if self.is_fitted and self._regressor is not None:
             weights_test = self.reducer.encode_to_per_mode(
                 fields_test_centered, exclude_idx=self.fixed_idx

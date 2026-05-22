@@ -131,7 +131,7 @@ class RowwiseConstrainedModel(SurrogateModel):
         fields_test_centered: List[np.ndarray],
         fields_train_centered: List[np.ndarray],
         means_train: List[np.ndarray],
-        _weights_test_norm=None,   # ignoré — calculé en interne
+        _weights_test_norm=None,   # ignored — computed internally
     ) -> Dict:
         """PCA reconstruction error + per-mode latent GP Q²/RMSE."""
         result = {}

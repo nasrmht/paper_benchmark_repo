@@ -1,31 +1,31 @@
-"""Benchmark CFD diffuser — version multi-seeds parallèle.
+"""Benchmark CFD diffuser — parallel multi-seed version.
 
-Optimisation mémoire
---------------------
-Les données CFD sont fixes (S ~ 141 039 points, 3 champs, 150 échantillons).
-Charger ces données une fois dans le processus principal puis forker
-permet aux workers d'hériter une copie-sur-écriture (COW) du dataset,
-sans copier les tableaux numpy tant qu'ils ne sont pas modifiés.
+Memory Optimization
+-------------------
+CFD data are fixed (S ~ 141,039 points, 3 fields, 150 samples).
+Loading this data once in the main process and then forking
+allows workers to inherit a copy-on-write (COW) of the dataset,
+without copying numpy arrays as long as they are not modified.
 
-  Main process: charge CFDDataset (~420 MB float32)
+  Main process: loads CFDDataset (~420 MB float32)
        ↓  fork
-  Worker 0, 1, … : héritent du dataset COW, aucune copie des champs
+  Worker 0, 1, … : inherit COW dataset, no copy of fields
 
 Usage
 -----
-    # 10 seeds, 4 workers en parallèle
+    # 10 seeds, 4 workers in parallel
     python run_cfd_multiprocess.py --seeds 0 1 2 3 4 5 6 7 8 9 --n_workers 4
 
-    # Mode rapide pour tester
+    # Quick mode for testing
     python run_cfd_multiprocess.py --seeds 0 1 --quick --n_workers 2
 
-    # Sans stocker les prédictions (recommandé pour S~141k)
+    # Without storing predictions (recommended for S~141k)
     python run_cfd_multiprocess.py --seeds 0 1 2 --no_predictions
 
-    # Reprendre des seeds manquants (--skip_existing)
+    # Resume missing seeds (--skip_existing)
     python run_cfd_multiprocess.py --seeds 0 1 2 --skip_existing
 
-Résultats : un fichier zarr par seed,  {prefix}_seed{N}.zarr
+Results: one zarr file per seed, {prefix}_seed{N}.zarr
 """
 import argparse
 import os
@@ -47,7 +47,7 @@ _SHARED_DATASET: CFDDataset = None
 
 
 def _worker_init(dataset: CFDDataset) -> None:
-    """Initialise le dataset global dans le worker (utilisé avec initializer)."""
+    """Initializes the global dataset in the worker (used with initializer)."""
     global _SHARED_DATASET
     _SHARED_DATASET = dataset
 
@@ -81,32 +81,32 @@ def _run_one_seed(args_tuple) -> str:
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description="Benchmark CFD multi-seeds avec données partagées"
+        description="Benchmark CFD multi-seeds with shared data"
     )
     p.add_argument("--seeds", type=int, nargs="+", default=list(range(23,30)),
-                   help="Liste des seeds à exécuter (défaut: 0 .. 9)")
+                   help="List of seeds to execute (default: 23 .. 29)")
     p.add_argument("--n_workers", type=int, default=-1,
-                   help="Nombre de workers parallèles (défaut: 4)")
+                   help="Number of parallel workers (default: -1)")
     p.add_argument("--storage_prefix", default="results_n=20_cfd",
-                   help="Préfixe zarr : '{prefix}_seed{N}.zarr'")
+                   help="Zarr prefix: '{prefix}_seed{N}.zarr'")
     p.add_argument("--data_root", default=None,
-                   help="Chemin vers cfd_diffuseur/")
+                   help="Path to cfd_diffuseur/")
     p.add_argument("--quick", action="store_true",
-                   help="Mode rapide")
+                   help="Quick mode")
     p.add_argument("--n_modes", type=int, default=None,
-                   help="Forcer un seul n_modes")
+                   help="Force a single n_modes")
     p.add_argument("--skip_existing", action="store_true",
-                   help="Sauter les modèles déjà stockés dans le zarr")
+                   help="Skip models already stored in the zarr")
     p.add_argument("--no_rc",  action="store_true")
     p.add_argument("--no_ci",  action="store_true")
     p.add_argument("--no_fi",  action="store_true")
     p.add_argument("--no_fm",  action="store_true")
     p.add_argument("--no_predictions", action="store_true",
-                   help="Ne pas stocker les prédictions brutes (recommandé)")
+                   help="Do not store raw predictions (recommended)")
     p.add_argument("--quiet", action="store_true",
-                   help="Réduire la verbosité par seed")
+                   help="Reduce verbosity per seed")
     p.add_argument("--sequential", action="store_true",
-                   help="Exécuter les seeds séquentiellement (débug)")
+                   help="Execute seeds sequentially (debug)")
     return p.parse_args()
 
 

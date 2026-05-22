@@ -1301,19 +1301,19 @@ def main():
     # variant_filter = {"CI": [0, 2], "FI": [0, 2], "FM": [0, 2]}
     variant_filter = None
 
-    # ── Paramètres d'apparence globaux ───────────────────────────────────────
-    # Taille globale des figures (largeur, hauteur) en pouces
+    # ── Global Appearance Parameters ─────────────────────────────────────────
+    # Global size for figures (width, height) in inches
     GLOBAL_FIGSIZE = (18, 6)
     
-    # Taille pour la figure de décomposition (si None, auto-calculée)
+    # Size for the decomposition figure (if None, auto-calculated)
     DECOMP_FIGSIZE = (18, 6)
 
-    # Échelle de la taille de police (plus grand = polices plus grosses)
+    # Font size scale (larger = bigger fonts)
     FONT_SCALE = 1.6
 
-    # Force les labels d'axes (qui sont en texte mathématique pour les échelles log) à hériter du style normal (permettant le gras manuel)
+    # Force axis labels (which are in math text for log scales) to inherit regular style (enabling manual bold)
     plt.rcParams["mathtext.default"] = "regular"
-    # Utilise la police 'cm' (Computer Modern) pour les maths afin d'avoir le caractère \mathcal{E} en gras sans erreur
+    # Use the 'cm' (Computer Modern) font for math to display the \mathcal{E} character in bold without error
     plt.rcParams["mathtext.fontset"] = "cm"
     # ─────────────────────────────────────────────────────────────────────────
 

@@ -1,20 +1,20 @@
-"""Benchmark Lotka-Volterra — script mono-seed (compatible cluster).
+"""Benchmark Lotka-Volterra — single-seed script (cluster compatible).
 
 Usage
 -----
-    # Standard (storage auto-nommé d'après le seed)
+    # Standard (storage auto-named after seed)
     python run_lotka_volterra.py --seed 42
 
-    # Storage explicite
+    # Explicit storage
     python run_lotka_volterra.py --seed 7 --storage my_run_seed7.pkl
 
-    # Mode rapide pour tester
+    # Quick mode for testing
     python run_lotka_volterra.py --quick --seed 0
 
-    # Un seul n_modes (pour benchmarks multi-seeds comparatifs)
+    # Single n_modes (for comparative multi-seed benchmarks)
     python run_lotka_volterra.py --seed 3 --n_modes 5
 
-Résultats stockés dans  {storage_prefix}_seed{seed}.pkl  par défaut.
+Results stored in {storage_prefix}_seed{seed}.pkl by default.
 """
 import argparse
 import sys
@@ -36,28 +36,28 @@ from benchmark_pca_gp.postprocessing.analysis import ResultsAnalyzer
 def parse_args():
     p = argparse.ArgumentParser(description="Benchmark LV — single seed")
     p.add_argument("--quick", action="store_true",
-                   help="Mode rapide : peu d'échantillons et peu de modes")
+                   help="Quick mode: few samples and few modes")
     p.add_argument("--storage", default=None,
-                   help="Chemin pkl explicite (écrase --storage_prefix)")
+                   help="Explicit pkl path (overrides --storage_prefix)")
     p.add_argument("--storage_prefix", default="results_N_b_=10_lv",
-                   help="Préfixe du nommage auto '{prefix}_seed{N}.zarr'")
+                   help="Prefix for auto-naming '{prefix}_seed{N}.zarr'")
     p.add_argument("--seed", type=int, default=1,
-                   help="Graine aléatoire")
+                   help="Random seed")
     p.add_argument("--n_train", type=int, default=None,
-                   help="Nombre d'échantillons d'entraînement")
+                   help="Number of training samples")
     p.add_argument("--n_total", type=int, default=None,
-                   help="Nombre total d'échantillons (train + test)")
+                   help="Total number of samples (train + test)")
     p.add_argument("--n_modes", type=int, default=None,
-                   help="Si fourni, remplace la liste de modes par [n_modes]")
+                   help="If provided, replaces the mode list with [n_modes]")
     p.add_argument("--skip_existing", action="store_true",
-                   help="Sauter les modèles déjà présents dans le zarr")
-    p.add_argument("--no_rc",  action="store_true", help="Exclure les modèles RC")
-    p.add_argument("--no_ci",  action="store_true", help="Exclure les modèles CI")
-    p.add_argument("--no_fi",  action="store_true", help="Exclure les modèles FI")
-    p.add_argument("--no_fm",  action="store_true", help="Exclure les modèles FM")
-    p.add_argument("--quiet",  action="store_true", help="Réduire la verbosité")
+                   help="Skip models already present in zarr")
+    p.add_argument("--no_rc",  action="store_true", help="Exclude RC models")
+    p.add_argument("--no_ci",  action="store_true", help="Exclude CI models")
+    p.add_argument("--no_fi",  action="store_true", help="Exclude FI models")
+    p.add_argument("--no_fm",  action="store_true", help="Exclude FM models")
+    p.add_argument("--quiet",  action="store_true", help="Reduce verbosity")
     p.add_argument("--no_summary", action="store_true",
-                   help="Ne pas afficher le résumé final")
+                   help="Do not display the final summary")
     return p.parse_args()
 
 
@@ -66,11 +66,11 @@ def parse_args():
 # ---------------------------------------------------------------------------
 
 def build_benchmark_config(args) -> dict:
-    """Construit le dict de configuration à partir des arguments parsés.
+    """Constructs the configuration dict from the parsed arguments.
 
-    Compatible avec un objet argparse.Namespace ou tout objet ayant les
-    mêmes attributs (utile pour l'appel programmatique depuis le script
-    multi-seeds).
+    Compatible with an argparse.Namespace object or any object having the
+    same attributes (useful for programmatic calls from the multi-seeds
+    script).
     """
     if getattr(args, "quick", False):
         cfg = dict(
@@ -109,7 +109,7 @@ def build_benchmark_config(args) -> dict:
             fixed_indices    = [0, 1, 2, 3],
         )
 
-    # --n_modes remplace la liste complète par un seul mode
+    # --n_modes replaces the complete list with a single mode
     n_modes = getattr(args, "n_modes", None)
     if n_modes is not None:
         cfg["n_modes_list"] = [n_modes]
@@ -134,22 +134,23 @@ def run_benchmark(
     skip_existing: bool = False,
     verbose: bool = True,
 ) -> None:
-    """Exécute le benchmark complet pour un seed donné.
+    """Runs the complete benchmark for a given seed.
 
-    Peut être appelée directement depuis un script multi-seeds ou un
-    notebook sans passer par la CLI.
+    Can be called directly from a multi-seeds script or a
+    notebook without going through the CLI.
 
     Parameters
     ----------
-    seed         : graine aléatoire
-    storage_path : chemin du fichier zarr de sortie
-    config       : dict retourné par build_benchmark_config()
-    skip_existing: ne pas ré-entraîner les modèles déjà stockés
-    verbose      : afficher la progression
+    seed         : random seed
+    storage_path : path to the output zarr file
+    config       : dict returned by build_benchmark_config()
+    skip_existing: do not retrain models already stored
+    verbose      : show progress
     """
     dataset = LotkaVolterraDataset(t_end=config["t_end"], dt=config["dt"])
     u = dataset.constraint_vector
     Q = dataset.n_outputs
+ 
 
     if verbose:
         print(f"[seed={seed}] {type(dataset).__name__}  "
@@ -191,7 +192,7 @@ def run_benchmark(
 
     if verbose:
         print(f"[seed={seed}] standard={len(suite['standard'])}  "
-              f"optimisés={len(suite['optimized'])}")
+              f"optimized={len(suite['optimized'])}")
 
     runner = BenchmarkRunner(
         dataset       = dataset,
@@ -206,7 +207,7 @@ def run_benchmark(
 
 
 # ---------------------------------------------------------------------------
-# Point d'entrée CLI
+# CLI Entry point
 # ---------------------------------------------------------------------------
 
 def main():

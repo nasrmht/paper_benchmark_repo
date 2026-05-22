@@ -1281,7 +1281,7 @@ def main():
     print("\nLoading reconstruction RRMSE data …")
     data_recon, _ = load_recon_data(zarr_specs, u=u, max_workers=4)
 
-    # Sauvegarde des données pour un tracé rapide ultérieur
+    # Save data for fast subsequent plotting
     import pickle
     with open("plot_lv_rrmse_data.pkl", "wb") as f:
         pickle.dump({

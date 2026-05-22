@@ -52,29 +52,29 @@ _DEFAULT_DATA_ROOT = os.path.join(
 def parse_args():
     p = argparse.ArgumentParser(description="Benchmark CFD — single seed")
     p.add_argument("--quick", action="store_true",
-                   help="Mode rapide : peu de modes et peu de restarts")
+                   help="Quick mode: few modes and few restarts")
     p.add_argument("--storage", default=None,
-                   help="Chemin pkl explicite")
+                   help="Explicit pkl path")
     p.add_argument("--storage_prefix", default="results_n=20_cfd",
-                   help="Préfixe du nommage auto '{prefix}_seed{N}.zarr'")
+                   help="Prefix for auto-naming '{prefix}_seed{N}.zarr'")
     p.add_argument("--seed", type=int, default=22,
-                   help="Graine aléatoire (affecte uniquement les restarts GP)")
+                   help="Random seed (affects only GP restarts)")
     p.add_argument("--n_modes", type=int, default=None,
-                   help="Si fourni, remplace la liste de modes par [n_modes]")
+                   help="If provided, replaces the mode list with [n_modes]")
     p.add_argument("--data_root", default=None,
-                   help="Chemin vers cfd_diffuseur/ (remplace le défaut)")
+                   help="Path to cfd_diffuseur/ (overrides default)")
     p.add_argument("--skip_existing", action="store_true",
-                   help="Sauter les modèles déjà stockés")
-    p.add_argument("--no_rc",  action="store_true", help="Exclure les modèles RC")
-    p.add_argument("--no_ci",  action="store_true", help="Exclure les modèles CI")
-    p.add_argument("--no_fi",  action="store_true", help="Exclure les modèles FI")
-    p.add_argument("--no_fm",  action="store_true", help="Exclure les modèles FM")
+                   help="Skip models already stored")
+    p.add_argument("--no_rc",  action="store_true", help="Exclude RC models")
+    p.add_argument("--no_ci",  action="store_true", help="Exclude CI models")
+    p.add_argument("--no_fi",  action="store_true", help="Exclude FI models")
+    p.add_argument("--no_fm",  action="store_true", help="Exclude FM models")
     p.add_argument("--no_predictions", action="store_true",
-                   help="Ne pas stocker les tableaux de prédictions brutes "
-                        "(économise ~250 MB/modèle pour S~141k)")
-    p.add_argument("--quiet", action="store_true", help="Réduire la verbosité")
+                   help="Do not store raw prediction arrays "
+                        "(saves ~250 MB/model for S~141k)")
+    p.add_argument("--quiet", action="store_true", help="Reduce verbosity")
     p.add_argument("--no_summary", action="store_true",
-                   help="Ne pas afficher le résumé final")
+                   help="Do not display the final summary")
     return p.parse_args()
 
 
@@ -83,7 +83,7 @@ def parse_args():
 # ---------------------------------------------------------------------------
 
 def build_benchmark_config(args) -> dict:
-    """Construit la configuration à partir des args (Namespace ou objet similaire)."""
+    """Constructs the configuration from args (Namespace or similar object)."""
     if getattr(args, "quick", False):
         cfg = dict(
             n_train          = 50,
@@ -205,7 +205,7 @@ def run_benchmark(
 
     if verbose:
         print(f"[seed={seed}] standard={len(suite['standard'])}  "
-              f"optimisés={len(suite['optimized'])}")
+              f"optimized={len(suite['optimized'])}")
 
     runner = BenchmarkRunner(
         dataset           = dataset,

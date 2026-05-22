@@ -164,7 +164,7 @@ python benchmark_pca_gp/run_cfd.py --seed 20
 python benchmark_pca_gp/run_cfd_multiprocess.py --seeds 20 21 22 --n_workers 3
 ```
 
-The paper uses seeds 20–28 with N=20 training samples.
+The paper uses seeds 20–28 with N=50 training samples.
 
 ---
 
@@ -183,5 +183,4 @@ The `open_storage(path)` factory in `benchmark_pca_gp/benchmark/storage.py` sele
 
 - **LcGP** is included directly in this repo. No separate installation needed.
 - The **constraint benchmark** data (pickle files) is committed to git (~1.6 MB total).
-- The **LV and CFD zarr results** are large (~1.4 GB per LV seed, ~6.5 GB per CFD seed). Consider hosting them on Zenodo/figshare for a public release and providing a download script.
 - The CFD training/test field data is **not included** (private dataset). Contact the authors for access.

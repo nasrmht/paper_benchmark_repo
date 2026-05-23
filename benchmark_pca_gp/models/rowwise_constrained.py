@@ -42,7 +42,7 @@ class RowwiseConstrainedModel(SurrogateModel):
         n_restarts: int = 3,
         maxiter: int = 100,
         noise_var: float = 1e-3,
-        seed: int = None,
+        seed: int = 42,
     ):
         reducer = RowwisePCA(n_modes=n_modes)
         super().__init__(name=name, reducer=reducer, u_vector=u, fixed_idx=None)

@@ -35,7 +35,7 @@ class RowwisePCA(FieldReducer):
         self._Q = Q
         y_stacked = np.vstack(fields_centered)   # (Q*N, S)
         n_comp = min(self.n_modes, y_stacked.shape[1], y_stacked.shape[0])
-        self._pca = PCA(n_components=n_comp)
+        self._pca = PCA(n_components=n_comp, random_state=42)
         self._pca.fit(y_stacked)
         self.n_modes = n_comp   # update in case clamped
         self.is_fitted = True

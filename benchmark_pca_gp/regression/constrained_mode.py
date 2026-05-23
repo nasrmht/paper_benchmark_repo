@@ -3,7 +3,7 @@ import numpy as np
 from typing import Tuple, List
 
 from LcGP.mogp.core import MOGPR
-from LcGP.mogp.kernels.ConstrainedLMCKernelBeta import LMCKernelConstrainedBeta
+from LcGP.mogp.kernels.ConstrainedLMCKernel import LMCKernelConstrained
 from LcGP.mogp.kernels.Kernel import RBFKernel, Matern52Kernel
 
 from .base import ModeRegressor, _extract_per_point_cov
@@ -56,11 +56,12 @@ class ConstrainedMOGPModeRegressor(ModeRegressor):
     def fit(self, X: np.ndarray, w: np.ndarray, **kwargs) -> None:
         """Fit constrained MOGP on (N, d) inputs and (N, Q) weights."""
         base_kernels = [Matern52Kernel(input_dim=X.shape[1]) for _ in range(self.n_kernels)]
-        kernel = LMCKernelConstrainedBeta(
+        kernel = LMCKernelConstrained(
             base_kernels=base_kernels,
             output_dim=self.output_dim,
             u_vector=self.u_norm,
             rank=self.rank,
+            seed=self.seed,
         )
         self._model = MOGPR(
             kernel=kernel,

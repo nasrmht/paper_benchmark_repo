@@ -73,7 +73,7 @@ def parse_args():
     grp = p.add_mutually_exclusive_group()
     grp.add_argument("--seeds", nargs="+", type=int,
                      help="Explicit seed values (e.g. 0 1 2 3 4)")
-    grp.add_argument("--n_seeds", type=int, default=10,
+    grp.add_argument("--n_seeds", type=int, default=5,
                      help="Number of consecutive seeds (default: 10)")
 
     p.add_argument("--seed_start", type=int, default=1,
@@ -84,7 +84,7 @@ def parse_args():
     # --- Benchmark configuration (identical to run_lotka_volterra.py) ---
     p.add_argument("--quick", action="store_true",
                    help="Quick mode (few samples)")
-    p.add_argument("--storage_prefix", default="results_N_=30_lv",
+    p.add_argument("--storage_prefix", default="results_N_b=10_lv",
                    help="Prefix of the results files (default: results_lv)")
     p.add_argument("--n_train",  type=int, default=None)
     p.add_argument("--n_total",  type=int, default=None)

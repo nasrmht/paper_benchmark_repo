@@ -27,3 +27,10 @@ figure_lv/
 .DS_Store
 .venv/
 venv/
+cgp_env/
+
+*.zarr
+*.npz
+*.npy
+*.pkl
+

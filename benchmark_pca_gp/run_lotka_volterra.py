@@ -92,7 +92,7 @@ def build_benchmark_config(args) -> dict:
         )
     else:
         cfg = dict(
-            n_train          = getattr(args, "n_train", None) or 30,
+            n_train          = getattr(args, "n_train", None) or 10,
             n_total          = getattr(args, "n_total", None) or 100,
             n_modes_list     = [10],
             n_restarts       = 30,

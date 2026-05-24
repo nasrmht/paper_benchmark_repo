@@ -73,7 +73,7 @@ def parse_args():
     grp = p.add_mutually_exclusive_group()
     grp.add_argument("--seeds", nargs="+", type=int,
                      help="Explicit seed values (e.g. 0 1 2 3 4)")
-    grp.add_argument("--n_seeds", type=int, default=5,
+    grp.add_argument("--n_seeds", type=int, default=10,
                      help="Number of consecutive seeds (default: 10)")
 
     p.add_argument("--seed_start", type=int, default=1,

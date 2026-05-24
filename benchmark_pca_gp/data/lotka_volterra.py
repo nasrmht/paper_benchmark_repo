@@ -92,12 +92,14 @@ class LotkaVolterraDataset(Dataset):
         b_range: Tuple[float, float] = (0.37, 0.40),
         d_range: Tuple[float, float] = (0.00, 0.06),
         n_time_steps: int = None,
+        n_train: int = None,
     ):
         self.t_end = t_end
         self.dt = dt
         self.b_range = b_range
         self.d_range = d_range
         self.n_time_steps = n_time_steps
+        self.n_train = n_train
 
         # Fixed parameters
         self._a = 1.1
@@ -141,15 +143,21 @@ class LotkaVolterraDataset(Dataset):
 
         These fields satisfy d·p + b·q − a·r − c·s = 0 exactly.
         """
-        # sampler = LatinHypercube(d=2, seed=seed)
-        # lhs = scale(sampler.random(n_total),
-        #             l_bounds=[self.b_range[0], self.d_range[0]],
-        #             u_bounds=[self.b_range[1], self.d_range[1]])
-        # b_vals = lhs[:, 0]
-        # d_vals = lhs[:, 1]
-        rng = np.random.RandomState(seed)
-        b_vals = rng.uniform(*self.b_range, n_total)
-        d_vals = rng.uniform(*self.d_range, n_total)
+        n_tr = self.n_train #if self.n_train is not None else int(n_total * 0.8)
+        n_te = n_total - n_tr
+
+        sampler_tr = LatinHypercube(d=2, seed=seed)
+        lhs_tr = scale(sampler_tr.random(n_tr),
+                       l_bounds=[self.b_range[0], self.d_range[0]],
+                       u_bounds=[self.b_range[1], self.d_range[1]])
+        
+        sampler_te = LatinHypercube(d=2, seed=seed + 1)
+        lhs_te = scale(sampler_te.random(n_te),
+                       l_bounds=[self.b_range[0], self.d_range[0]],
+                       u_bounds=[self.b_range[1], self.d_range[1]])
+
+        b_vals = np.concatenate([lhs_tr[:, 0], lhs_te[:, 0]])
+        d_vals = np.concatenate([lhs_tr[:, 1], lhs_te[:, 1]])
 
         params_all = np.column_stack([
             np.full(n_total, self._a),
@@ -185,6 +193,31 @@ class LotkaVolterraDataset(Dataset):
 
         X_gp = np.column_stack([b_vals, d_vals])
         return X_gp, [p, q, r, s]
+
+    def split_train_test(
+        self,
+        X: np.ndarray,
+        fields: List[np.ndarray],
+        n_train: int,
+        seed: int = None,
+    ) -> Tuple[np.ndarray, np.ndarray, List[np.ndarray], List[np.ndarray]]:
+        """Return a fixed train/test split.
+
+        The first ``n_train`` rows are train, the rest are test.
+        """
+        X_train = X[:n_train]
+        X_test  = X[n_train:]
+
+        # X_mean = np.mean(X_train, axis=0)
+        # X_std = np.std(X_train, axis=0)
+        # X_std[X_std < 1e-9] = 1.0
+
+        # X_train_normalized = (X_train - X_mean) / X_std
+        # X_test_normalized = (X_test - X_mean) / X_std
+        f_train = [f[:n_train] for f in fields]
+        f_test  = [f[n_train:] for f in fields]
+        return X_train, X_test, f_train, f_test
+
 
     # ------------------------------------------------------------------
     # Generalised constraint interface (Case 3, zero RHS)

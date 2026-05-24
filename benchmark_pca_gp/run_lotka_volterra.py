@@ -147,7 +147,7 @@ def run_benchmark(
     skip_existing: do not retrain models already stored
     verbose      : show progress
     """
-    dataset = LotkaVolterraDataset(t_end=config["t_end"], dt=config["dt"])
+    dataset = LotkaVolterraDataset(t_end=config["t_end"], dt=config["dt"], n_train=config["n_train"])
     u = dataset.constraint_vector
     Q = dataset.n_outputs
  

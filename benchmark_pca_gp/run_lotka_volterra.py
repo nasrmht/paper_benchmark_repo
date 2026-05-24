@@ -96,14 +96,14 @@ def build_benchmark_config(args) -> dict:
             n_total          = getattr(args, "n_total", None) or 100,
             n_modes_list     = [10],
             n_restarts       = 30,
-            maxiter          = 100,
-            noise_var        = 1e-3,
+            maxiter          = 150,
+            noise_var        = 1e-4,
             # FM (MOGP-LCM)
             n_kernels_lmc    = 2,
             rank_lmc         = [2, 2],
             # RC (Constrained MOGP)
             n_kernels_rc     = 2,
-            rank_rc          = [2, 2],
+            rank_rc          = [2, 1],
             t_end            = 20.0,
             dt               = 0.001,
             fixed_indices    = [0, 1, 2, 3],

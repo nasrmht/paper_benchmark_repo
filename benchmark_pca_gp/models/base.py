@@ -162,7 +162,7 @@ def normalise_weights_per_mode(
     std_matrix = np.zeros((M, q))
     weights_norm = []
     for m, w in enumerate(weights_per_mode):
-        s = w.std(axis=0)*0.0+w.std()
+        s = w.std(axis=0)
         s = np.where(s < 1e-12, 1.0, s)   # avoid division by zero
         std_matrix[m] = s
         weights_norm.append(w / s[np.newaxis, :])

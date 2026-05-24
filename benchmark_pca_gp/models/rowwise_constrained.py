@@ -82,7 +82,7 @@ class RowwiseConstrainedModel(SurrogateModel):
         #    Then fit one ConstrainedMOGP per mode
         self._mode_models = []
         for m in range(M):
-            u_norm_m = self.u #* self._std_weights[m]   # (Q,)
+            u_norm_m = (self.u * self._std_weights[m]) / np.linalg.norm(self.u * self._std_weights[m])   # (Q,)
             model = ConstrainedMOGPModeRegressor(
                 output_dim=Q,
                 u_norm=u_norm_m,

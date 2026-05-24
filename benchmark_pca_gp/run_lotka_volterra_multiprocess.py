@@ -114,7 +114,7 @@ def main():
         seeds = list(range(args.seed_start, args.seed_start + args.n_seeds))
 
     n_workers = args.n_workers or min(len(seeds), multiprocessing.cpu_count())
-    storage_paths = [f"{args.storage_prefix}_seed{s}.zarr" for s in seeds]
+    storage_paths = [f"{args.storage_prefix}_seed{s}.pkl" for s in seeds]
 
     # Build config by reusing build_benchmark_config
     # (we simulate a minimal argparse namespace)
@@ -133,7 +133,7 @@ def main():
     print("=" * 60)
     print(f"Seeds    : {seeds}")
     print(f"Workers  : {n_workers}")
-    print(f"Storage  : {args.storage_prefix}_seed{{N}}.zarr")
+    print(f"Storage  : {args.storage_prefix}_seed{{N}}.pkl")
     print(f"Modes    : {config['n_modes_list']}")
     print(f"n_train  : {config['n_train']}  n_total: {config['n_total']}")
     print("=" * 60)
@@ -166,7 +166,7 @@ def main():
     # Aggregated multi-seeds summary
     if not args.no_summary and succeeded:
         done_paths = [
-            f"{args.storage_prefix}_seed{s}.zarr" for s in succeeded
+            f"{args.storage_prefix}_seed{s}.pkl" for s in succeeded
         ]
         print()
         print("=" * 70)

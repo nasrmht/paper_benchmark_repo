@@ -146,18 +146,21 @@ class LotkaVolterraDataset(Dataset):
         n_tr = self.n_train #if self.n_train is not None else int(n_total * 0.8)
         n_te = n_total - n_tr
 
-        sampler_tr = LatinHypercube(d=2, seed=seed)
-        lhs_tr = scale(sampler_tr.random(n_tr),
-                       l_bounds=[self.b_range[0], self.d_range[0]],
-                       u_bounds=[self.b_range[1], self.d_range[1]])
+        # sampler_tr = LatinHypercube(d=2, seed=seed)
+        # lhs_tr = scale(sampler_tr.random(n_tr),
+        #                l_bounds=[self.b_range[0], self.d_range[0]],
+        #                u_bounds=[self.b_range[1], self.d_range[1]])
         
-        sampler_te = LatinHypercube(d=2, seed=seed + 1)
-        lhs_te = scale(sampler_te.random(n_te),
-                       l_bounds=[self.b_range[0], self.d_range[0]],
-                       u_bounds=[self.b_range[1], self.d_range[1]])
+        # sampler_te = LatinHypercube(d=2, seed=seed + 1)
+        # lhs_te = scale(sampler_te.random(n_te),
+        #                l_bounds=[self.b_range[0], self.d_range[0]],
+        #                u_bounds=[self.b_range[1], self.d_range[1]])
 
-        b_vals = np.concatenate([lhs_tr[:, 0], lhs_te[:, 0]])
-        d_vals = np.concatenate([lhs_tr[:, 1], lhs_te[:, 1]])
+        # b_vals = np.concatenate([lhs_tr[:, 0], lhs_te[:, 0]])
+        # d_vals = np.concatenate([lhs_tr[:, 1], lhs_te[:, 1]])
+        rng = np.random.RandomState(seed)
+        b_vals = rng.uniform(*self.b_range, n_total)
+        d_vals = rng.uniform(*self.d_range, n_total)
 
         params_all = np.column_stack([
             np.full(n_total, self._a),
@@ -194,29 +197,29 @@ class LotkaVolterraDataset(Dataset):
         X_gp = np.column_stack([b_vals, d_vals])
         return X_gp, [p, q, r, s]
 
-    def split_train_test(
-        self,
-        X: np.ndarray,
-        fields: List[np.ndarray],
-        n_train: int,
-        seed: int = None,
-    ) -> Tuple[np.ndarray, np.ndarray, List[np.ndarray], List[np.ndarray]]:
-        """Return a fixed train/test split.
+    # def split_train_test(
+    #     self,
+    #     X: np.ndarray,
+    #     fields: List[np.ndarray],
+    #     n_train: int,
+    #     seed: int = None,
+    # ) -> Tuple[np.ndarray, np.ndarray, List[np.ndarray], List[np.ndarray]]:
+    #     """Return a fixed train/test split.
 
-        The first ``n_train`` rows are train, the rest are test.
-        """
-        X_train = X[:n_train]
-        X_test  = X[n_train:]
+    #     The first ``n_train`` rows are train, the rest are test.
+    #     """
+    #     X_train = X[:n_train]
+    #     X_test  = X[n_train:]
 
-        # X_mean = np.mean(X_train, axis=0)
-        # X_std = np.std(X_train, axis=0)
-        # X_std[X_std < 1e-9] = 1.0
+    #     # X_mean = np.mean(X_train, axis=0)
+    #     # X_std = np.std(X_train, axis=0)
+    #     # X_std[X_std < 1e-9] = 1.0
 
-        # X_train_normalized = (X_train - X_mean) / X_std
-        # X_test_normalized = (X_test - X_mean) / X_std
-        f_train = [f[:n_train] for f in fields]
-        f_test  = [f[n_train:] for f in fields]
-        return X_train, X_test, f_train, f_test
+    #     # X_train_normalized = (X_train - X_mean) / X_std
+    #     # X_test_normalized = (X_test - X_mean) / X_std
+    #     f_train = [f[:n_train] for f in fields]
+    #     f_test  = [f[n_train:] for f in fields]
+    #     return X_train, X_test, f_train, f_test
 
 
     # ------------------------------------------------------------------

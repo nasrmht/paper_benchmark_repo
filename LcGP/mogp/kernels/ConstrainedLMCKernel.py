@@ -17,7 +17,7 @@ class LMCKernelConstrained:
     """
     
     def __init__(self, base_kernels: List[Kernel], output_dim: int, u_vector: np.ndarray = None, 
-                 rank: Optional[List[int]] = None, seed: int = 43):
+                 latent_dim: Optional[List[int]] = None, seed: int = 43):
         """
         Initializes the constrained LMC kernel.
         
@@ -25,8 +25,8 @@ class LMCKernelConstrained:
             base_kernels: List of base kernels k_q(x, x')
             output_dim: Number of outputs (dimension D)
             u_vector: Constraint vector u of size output_dim. If None, a unit vector will be used.
-            rank: List of ranks for each coregionalization matrix B_q
-                 If None, all matrices will be of full rank
+            latent_dim: List of ranks for each coregionalization matrix B_q
+                 If None, all matrices will be of full latent_dim
             seed: Seed for random generation
         """
         self.base_kernels = base_kernels
@@ -45,13 +45,13 @@ class LMCKernelConstrained:
                 raise ValueError("The first element of the vector u cannot be zero")
             self.u_vector = np.array(u_vector) / np.linalg.norm(u_vector)  # Normalize u
         
-        # If rank is not specified, use full rank (=output_dim)
-        if rank is None:
-            self.rank = [output_dim] * len(base_kernels)
+        # If latent_dim is not specified, use full latent_dim (=output_dim)
+        if latent_dim is None:
+            self.latent_dim = [output_dim] * len(base_kernels)
         else:
-            if len(rank) != len(base_kernels):
+            if len(latent_dim) != len(base_kernels):
                 raise ValueError("The number of ranks must match the number of base kernels")
-            self.rank = rank
+            self.latent_dim = latent_dim
         
         # Initialize the L_q matrices (without the first rows which will be computed)
         self.Lq_params = []
@@ -64,7 +64,7 @@ class LMCKernelConstrained:
         # But the original code handled output_dim > 2 specifically.
         # For output_dim=2, the original code uses a specific logic.
         
-        for q, r in enumerate(self.rank):
+        for q, r in enumerate(self.latent_dim):
             # For each L_q matrix of size output_dim x r, 
             # we parameterize all elements except the first row L_q[0, :]
             
@@ -80,7 +80,7 @@ class LMCKernelConstrained:
         self.start_idx_Lq = start_idx
 
         # Add bounds for the scale factors sigma_B (positive)
-        #self._bounds.extend([(1.0, 10.0)] * len(self.rank))
+        #self._bounds.extend([(1.0, 10.0)] * len(self.latent_dim))
         # Add bounds for the base kernel parameters
         for kernel in self.base_kernels:
             self._bounds.extend(kernel.bounds)
@@ -98,7 +98,7 @@ class LMCKernelConstrained:
         """Sets all hyperparameters of the LMC kernel."""
         start_idx = 0
         if self.output_dim > 2:
-            for q, r in enumerate(self.rank):
+            for q, r in enumerate(self.latent_dim):
                 n_params_Lq = (self.output_dim - 1) * r
                 self.Lq_params[q] = params[start_idx:start_idx + n_params_Lq]
                 start_idx += n_params_Lq
@@ -117,7 +117,7 @@ class LMCKernelConstrained:
         Reconstructs the complete L_q matrix by computing the first row
         according to the constraint u.T @ L_q = 0 for each column j.
         """
-        r = self.rank[q]
+        r = self.latent_dim[q]
         output_dim = self.output_dim
         
         L_q = np.zeros((output_dim, r))
@@ -206,7 +206,7 @@ class LMCKernelConstrained:
                 L_q = self._reconstruct_Lq(q)
  
                 for i in range(1, self.output_dim):  # Skip row 0 (constrained)
-                    for j in range(self.rank[q]):
+                    for j in range(self.latent_dim[q]):
                         dB_q = self._compute_dB_q_dL(q, i, j, L_q)
                         gradients[param_idx] = np.kron(dB_q, K_spatial)
                         param_idx += 1
@@ -251,7 +251,7 @@ class LMCKernelConstrained:
             for q in range(len(self.base_kernels)):
                 L_q = self._reconstruct_Lq(q)
                 for i in range(1, self.output_dim):
-                    for j in range(self.rank[q]):
+                    for j in range(self.latent_dim[q]):
                         dB.append(self._compute_dB_q_dL(q, i, j, L_q))
         
         # # The derivative of B with respect to sigma_B is simply B_unit = L_q @ L_q.T
@@ -278,7 +278,7 @@ class LMCKernelConstrained:
         Yc = Y - Y.mean(axis=0)
         U, S, Vt = np.linalg.svd(Yc, full_matrices=False)
  
-        for q, r in enumerate(self.rank):
+        for q, r in enumerate(self.latent_dim):
             L_pca = Vt.T[:, :r] * np.sqrt(S[:r])
  
             # Projection to respect the constraint

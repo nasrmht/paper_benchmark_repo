@@ -554,7 +554,7 @@ def _sigma_op_diff(Vi: np.ndarray, di: np.ndarray,
                    Vj: np.ndarray, dj: np.ndarray, n: int) -> float:
     """||Σ_i − Σ_j||_op  where  Σ_k = (1/n) Y_k^T Y_k  (S×S).
 
-    Uses rank-2r reduction:
+    Uses latent_dim-2r reduction:
       Y_i^T Y_i − Y_j^T Y_j = [Vi, Vj] · diag(di², −dj²) · [Vi, Vj]^T
     QR-decompose W = [Vi, Vj] (S × 2r) → W = QR, then
       ||op|| = max|eig(R · Ω · R^T)| / n ,  Ω = diag(di², −dj²).

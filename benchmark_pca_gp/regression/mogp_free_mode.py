@@ -21,7 +21,7 @@ class MOGPLCMFreeModeRegressor(ModeRegressor):
     ----------
     output_dim : int   q, number of outputs (Q-1 non-fixed fields)
     n_kernels  : int   number of LCM base kernels
-    rank       : list  rank of each B_q
+    latent_dim       : list  latent_dim of each B_q
     n_restarts : int   number of optimisation restarts
     maxiter    : int   max iterations per restart
     noise_var  : float initial noise variance
@@ -31,14 +31,14 @@ class MOGPLCMFreeModeRegressor(ModeRegressor):
         self,
         output_dim: int,
         n_kernels: int = 2,
-        rank: List[int] = None,
+        latent_dim: List[int] = None,
         n_restarts: int = 3,
         maxiter: int = 100,
         noise_var: float = 1e-3,
     ):
         self.output_dim = output_dim
         self.n_kernels = n_kernels
-        self.rank = rank if rank is not None else [1] * n_kernels
+        self.latent_dim = latent_dim if latent_dim is not None else [1] * n_kernels
         self.n_restarts = n_restarts
         self.maxiter = maxiter
         self.noise_var = noise_var
@@ -49,7 +49,7 @@ class MOGPLCMFreeModeRegressor(ModeRegressor):
         kernel = LMCKernel(
             base_kernels=base_kernels,
             output_dim=self.output_dim,
-            rank=self.rank,
+            latent_dim=self.latent_dim,
         )
         self._model = MOGPR(
             kernel=kernel,

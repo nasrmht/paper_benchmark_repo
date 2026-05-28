@@ -15,7 +15,7 @@ class ModelRegistry:
     """Factory for creating benchmark surrogate models.
 
     All factory methods accept a ``gp_config`` dict with optional keys:
-        n_restarts, maxiter, noise_var, n_kernels, rank
+        n_restarts, maxiter, noise_var, n_kernels, latent_dim
     """
 
     # ------------------------------------------------------------------
@@ -36,7 +36,7 @@ class ModelRegistry:
             n_modes=n_modes,
             u=u,
             n_kernels=cfg.get("n_kernels", 2),
-            rank=cfg.get("rank", None),
+            latent_dim=cfg.get("latent_dim", None),
             n_restarts=cfg.get("n_restarts", 3),
             maxiter=cfg.get("maxiter", 100),
             noise_var=cfg.get("noise_var", 1e-3),
@@ -88,7 +88,7 @@ class ModelRegistry:
             return MOGPLCMModeRegressor(
                 output_dim=q,
                 n_kernels=cfg.get("n_kernels", 2),
-                rank=cfg.get("rank", None),
+                latent_dim=cfg.get("latent_dim", None),
                 n_restarts=cfg.get("n_restarts", 3),
                 maxiter=cfg.get("maxiter", 100),
                 noise_var=cfg.get("noise_var", 1e-3),

@@ -21,7 +21,7 @@ class LMCKernelConstrainedBeta:
         base_kernels: List[Kernel],
         output_dim: int,
         u_vector: np.ndarray = None,
-        rank: Optional[List[int]] = None,
+        latent_dim: Optional[List[int]] = None,
         seed: int = 43,
     ):
         self.base_kernels = base_kernels
@@ -38,19 +38,19 @@ class LMCKernelConstrainedBeta:
                 raise ValueError("First element of u cannot be zero")
             self.u_vector = np.array(u_vector) / np.linalg.norm(u_vector)
 
-        if rank is None:
-            self.rank = [output_dim] * len(base_kernels)
+        if latent_dim is None:
+            self.latent_dim = [output_dim] * len(base_kernels)
         else:
-            if len(rank) != len(base_kernels):
-                raise ValueError("len(rank) must equal len(base_kernels)")
-            self.rank = rank
+            if len(latent_dim) != len(base_kernels):
+                raise ValueError("len(latent_dim) must equal len(base_kernels)")
+            self.latent_dim = latent_dim
 
         self.Lq_params = []
         self._bounds = []
         np.random.seed(seed)
         start_idx = 0
 
-        for q, r in enumerate(self.rank):
+        for q, r in enumerate(self.latent_dim):
             if self.output_dim > 2:
                 n_params = (self.output_dim - 1) * r
                 self.Lq_params.append(np.random.randn(n_params))
@@ -62,8 +62,8 @@ class LMCKernelConstrainedBeta:
         self.start_idx_Lq = start_idx
 
         # sigma_B: one per kernel, estimated directly, initialised to 1
-        self.sigma_B = np.ones(len(self.rank))
-        self._bounds.extend([(1.0, 100.0)] * len(self.rank))
+        self.sigma_B = np.ones(len(self.latent_dim))
+        self._bounds.extend([(1.0, 100.0)] * len(self.latent_dim))
 
         for kernel in self.base_kernels:
             self._bounds.extend(kernel.bounds)
@@ -84,12 +84,12 @@ class LMCKernelConstrainedBeta:
     def params(self, params: np.ndarray):
         idx = 0
         if self.output_dim > 2:
-            for q, r in enumerate(self.rank):
+            for q, r in enumerate(self.latent_dim):
                 n = (self.output_dim - 1) * r
                 self.Lq_params[q] = params[idx:idx + n]
                 idx += n
         # sigma_B
-        n_q = len(self.rank)
+        n_q = len(self.latent_dim)
         self.sigma_B = params[idx:idx + n_q]
         idx += n_q
         # kernel params
@@ -108,7 +108,7 @@ class LMCKernelConstrainedBeta:
 
     def _reconstruct_Lq(self, q: int) -> np.ndarray:
         """Reconstruct L_q enforcing u^T L_q = 0 column-wise."""
-        r = self.rank[q]
+        r = self.latent_dim[q]
         L_q = np.zeros((self.output_dim, r))
 
         if self.output_dim > 2:
@@ -186,7 +186,7 @@ class LMCKernelConstrainedBeta:
                 L_q = self._reconstruct_Lq(q)
                 sigma_B_q = float(self.sigma_B[q])
                 for i in range(1, self.output_dim):
-                    for j in range(self.rank[q]):
+                    for j in range(self.latent_dim[q]):
                         dB_q = self._compute_dB_q_dL(q, i, j, L_q)
                         gradients[param_idx] = sigma_B_q * np.kron(dB_q, K_spatial)
                         param_idx += 1
@@ -225,7 +225,7 @@ class LMCKernelConstrainedBeta:
                 L_q = self._reconstruct_Lq(q)
                 sigma_B_q = float(self.sigma_B[q])
                 for i in range(1, self.output_dim):
-                    for j in range(self.rank[q]):
+                    for j in range(self.latent_dim[q]):
                         dB.append(sigma_B_q * self._compute_dB_q_dL(q, i, j, L_q))
         return dB
 
@@ -235,7 +235,7 @@ class LMCKernelConstrainedBeta:
             return
         Yc = Y - Y.mean(axis=0)
         U, S, Vt = np.linalg.svd(Yc, full_matrices=False)
-        for q, r in enumerate(self.rank):
+        for q, r in enumerate(self.latent_dim):
             L_pca = Vt.T[:, :r] * np.sqrt(S[:r])
             u = self.u_vector / np.linalg.norm(self.u_vector)
             P = np.eye(self.output_dim) - np.outer(u, u)

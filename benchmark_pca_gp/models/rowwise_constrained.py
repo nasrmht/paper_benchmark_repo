@@ -26,7 +26,7 @@ class RowwiseConstrainedModel(SurrogateModel):
     n_modes    : number of PCA modes M
     u          : constraint vector of length Q
     n_kernels  : number of LCM base kernels
-    rank       : LCM rank list (length = n_kernels)
+    latent_dim : LCM latent_dim list (length = n_kernels)
     n_restarts : GP optimisation restarts per mode
     maxiter    : max iterations per restart
     noise_var  : initial noise variance
@@ -38,7 +38,7 @@ class RowwiseConstrainedModel(SurrogateModel):
         n_modes: int,
         u: np.ndarray,
         n_kernels: int = 2,
-        rank: List[int] = None,
+        latent_dim: List[int] = None,
         n_restarts: int = 3,
         maxiter: int = 100,
         noise_var: float = 1e-3,
@@ -47,7 +47,7 @@ class RowwiseConstrainedModel(SurrogateModel):
         reducer = RowwisePCA(n_modes=n_modes)
         super().__init__(name=name, reducer=reducer, u_vector=u, fixed_idx=None)
         self.n_kernels = n_kernels
-        self.rank = rank if rank is not None else [1] * n_kernels
+        self.latent_dim = latent_dim if latent_dim is not None else [1] * n_kernels
         self.n_restarts = n_restarts
         self.maxiter = maxiter
         self.noise_var = noise_var
@@ -87,7 +87,7 @@ class RowwiseConstrainedModel(SurrogateModel):
                 output_dim=Q,
                 u_norm=u_norm_m,
                 n_kernels=self.n_kernels,
-                rank=self.rank,
+                latent_dim=self.latent_dim,
                 n_restarts=self.n_restarts,
                 maxiter=self.maxiter,
                 noise_var=self.noise_var,

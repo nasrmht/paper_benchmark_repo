@@ -176,7 +176,7 @@ def process_single_seed(seed_idx, n_train_list, n_test, noise_level):
             Y_sub = Y_tr_centered[:, cols]
             print("train lcm :")
             k1, k2 = MaternKernel_MO(input_dim=3), MaternKernel_MO(input_dim=3)
-            lmc_2out = LMCKernel(base_kernels=[k1, k2], output_dim=2, rank=[1, 1], seed=seed_idx)
+            lmc_2out = LMCKernel(base_kernels=[k1, k2], output_dim=2, latent_dim=[1, 1], seed=seed_idx)
             model_lcm = MOGPR(kernel=lmc_2out, noise_variance=1e-6, use_efficient_lik=False)
             model_lcm.fit(X_train, Y_sub, n_restarts=50, maxiter=200, seed=seed_idx, verbose=False, use_init_pca=True)
             print("end training lcm")
@@ -214,7 +214,7 @@ def process_single_seed(seed_idx, n_train_list, n_test, noise_level):
         k1_c, k2_c, k3_c = MaternKernel_MO(input_dim=3), MaternKernel_MO(input_dim=3), MaternKernel_MO(input_dim=3)
         lmc_constrained = LMCKernelConstrained(
             base_kernels=[k1_c, k2_c, k3_c], output_dim=3, 
-            u_vector=np.ones(3)*std_y_col, rank=[1, 1, 1], seed=seed_idx
+            u_vector=np.ones(3)*std_y_col, latent_dim=[1, 1, 1], seed=seed_idx
         )
         print("train constrained")
         model_const = MOGPR(kernel=lmc_constrained, noise_variance=1e-6, use_efficient_lik=False)

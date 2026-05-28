@@ -94,10 +94,10 @@ def build_benchmark_config(args) -> dict:
             noise_var        = 1e-3,
             # FM (MOGP-LCM)
             n_kernels_lmc    = 1,
-            rank_lmc         = [1],
+            latent_dim_lmc         = [1],
             # RC (Constrained MOGP)
             n_kernels_rc     = 1,
-            rank_rc          = [1],
+            latent_dim_rc          = [1],
             fixed_indices    = [0, 1, 2],
         )
     else:
@@ -110,10 +110,10 @@ def build_benchmark_config(args) -> dict:
             noise_var        = 1e-3,
             # FM (MOGP-LCM)
             n_kernels_lmc    = 2,
-            rank_lmc         = [1,2],
+            latent_dim_lmc         = [1,2],
             # RC (Constrained MOGP)
             n_kernels_rc     = 2,
-            rank_rc          = [2, 2],
+            latent_dim_rc          = [2, 2],
             fixed_indices    = [0, 1, 2],
         )
 
@@ -180,14 +180,14 @@ def run_benchmark(
     gp_config_lmc = {
         **_base,
         "n_kernels": config["n_kernels_lmc"],
-        "rank":      config["rank_lmc"],
+        "latent_dim":      config["latent_dim_lmc"],
     }
     gp_config_constrained = {
         **_base,
         "n_kernels": config["n_kernels_rc"],
-        "rank":      config["rank_rc"],
+        "latent_dim":      config["latent_dim_rc"],
     }
-    gp_config_sogp = _base   # CI and FI (no n_kernels/rank)
+    gp_config_sogp = _base   # CI and FI (no n_kernels/latent_dim)
 
     suite = ModelRegistry.create_benchmark_suite(
         n_modes_list         = config["n_modes_list"],

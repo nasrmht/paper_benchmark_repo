@@ -19,38 +19,38 @@ class LMCKernelUnit:
     L_q[0,0] = 1 - sum of the absolute values of the other elements of L_q
     """
     
-    def __init__(self, base_kernels: List[Kernel], output_dim: int, rank: Optional[List[int]] = None, seed : int = 43):
+    def __init__(self, base_kernels: List[Kernel], output_dim: int, latent_dim: Optional[List[int]] = None, seed : int = 43):
         """
         Initializes the LMC kernel.
         
         Args:
             base_kernels: List of base kernels k_q(x, x')
             output_dim: Number of outputs (dimension D)
-            rank: List of ranks for each coregionalization matrix B_q
-                 If None, all matrices will be of full rank
+            latent_dim: List of ranks for each coregionalization matrix B_q
+                 If None, all matrices will be of full latent_dim
         """
         self.base_kernels = base_kernels
         self.output_dim = output_dim
         self.start_idx_Lq = 0
         
-        # If rank is not specified, use full rank (=output_dim)
-        if rank is None:
-            self.rank = [output_dim] * len(base_kernels)
+        # If latent_dim is not specified, use full latent_dim (=output_dim)
+        if latent_dim is None:
+            self.latent_dim = [output_dim] * len(base_kernels)
         else:
-            if len(rank) != len(base_kernels):
+            if len(latent_dim) != len(base_kernels):
                 raise ValueError("The number of ranks must match the number of base kernels")
-            self.rank = rank
+            self.latent_dim = latent_dim
         
         # Initialize the Lq_unit matrices (without the first element which will be computed)
         self.Lq_unit_params = []
         
         # Initialize the scale factors sigma_B for each B_q matrix
-        self.sigma_B_params = np.ones(len(self.rank)) #* 0.5  # Initialization at 0.5
+        self.sigma_B_params = np.ones(len(self.latent_dim)) #* 0.5  # Initialization at 0.5
         
         self._bounds = []
         np.random.seed(seed)
         start_idx = 0
-        for q, r in enumerate(self.rank):
+        for q, r in enumerate(self.latent_dim):
             # For each L_q matrix of size output_dim x r, 
             # we parameterize all elements except the first L_q[0,0]
             n_params = output_dim * r - 1  # -1 to exclude L_q[0,0]
@@ -67,7 +67,7 @@ class LMCKernelUnit:
         
         
         # Add bounds for the scale factors sigma_B (positive)
-        self._bounds.extend([(1.0, 10.0)] * len(self.rank))
+        self._bounds.extend([(1.0, 10.0)] * len(self.latent_dim))
         
         # Add bounds for the base kernel parameters
         for kernel in self.base_kernels:
@@ -88,14 +88,14 @@ class LMCKernelUnit:
         """Sets all hyperparameters of the LMC kernel."""
         # Extract parameters of Lq_unit matrices (without L_q[0,0])
         start_idx = 0
-        for q, r in enumerate(self.rank):
+        for q, r in enumerate(self.latent_dim):
             n_params_Lq = self.output_dim * r - 1  # -1 to exclude L_q[0,0]
             self.Lq_unit_params[q] = params[start_idx:start_idx + n_params_Lq]
             start_idx += n_params_Lq
         
         # Extract sigma_B parameters
-        self.sigma_B_params = params[start_idx:start_idx + len(self.rank)]
-        start_idx += len(self.rank)
+        self.sigma_B_params = params[start_idx:start_idx + len(self.latent_dim)]
+        start_idx += len(self.latent_dim)
         
         # Extract base kernel parameters
         for kernel in self.base_kernels:
@@ -116,9 +116,9 @@ class LMCKernelUnit:
             q: Kernel index
             
         Returns:
-            Reconstructed Lq matrix of shape (output_dim, rank[q])
+            Reconstructed Lq matrix of shape (output_dim, latent_dim[q])
         """
-        r = self.rank[q]
+        r = self.latent_dim[q]
         #n_params = self.output_dim * r - 1  # Number of parameters without L_q[0,0]
         
         # Create a full matrix for Lq
@@ -160,7 +160,7 @@ class LMCKernelUnit:
             q: Kernel index
             
         Returns:
-            Lq matrix of shape (output_dim, rank[q])
+            Lq matrix of shape (output_dim, latent_dim[q])
         """
         return self._reconstruct_Lq(q)
     
@@ -256,7 +256,7 @@ class LMCKernelUnit:
             
             # Compute the gradients with respect to the elements of Lq
             for d in range(self.output_dim):
-                for jj in range(self.rank[q]):
+                for jj in range(self.latent_dim[q]):
                     if d == 0 and jj == 0:
                         continue  # Skip L_q[0,0] which is not a free parameter
                     
@@ -346,7 +346,7 @@ class LMCKernelUnit:
             
             # Loop over all parameters (rows 2 to output_dim-1)
             for i in range(self.output_dim):
-                for j in range(self.rank[q]):
+                for j in range(self.latent_dim[q]):
                     if i == 0 and j == 0:
                         continue
                     # Compute dB_q with respect to L_q[i,j]
@@ -390,7 +390,7 @@ class LMCKernelUnit:
         Yc = Y - Y.mean(axis=0)
         U, S, Vt = np.linalg.svd(Yc, full_matrices=False)
 
-        for q, r in enumerate(self.rank):
+        for q, r in enumerate(self.latent_dim):
             L_pca = Vt.T[:, :r] * np.sqrt(S[:r])
 
             # Keep only the free rows (1:)

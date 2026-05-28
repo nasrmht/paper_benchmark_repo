@@ -475,7 +475,7 @@ class MOGPR:
         X_train_spatial = self.X_train[:n, :-1]
         n_test = X_test.shape[0]
         output_dim =self.kernel.output_dim
-        rang = self.kernel.rank[0]
+        rang = self.kernel.latent_dim[0]
         B = self.kernel.get_L(0)*np.sqrt(self.kernel.get_sigma_B(0))
         #B_p = np.linalg.cholesky(self.kernel.get_B(0)+1e-6*np.eye(output_dim))
         #print("sigma B : ", self.kernel.get_sigma_B(0))

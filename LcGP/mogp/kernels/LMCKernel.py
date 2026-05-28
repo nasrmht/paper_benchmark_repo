@@ -26,7 +26,7 @@ class LMCKernel:
         Spatial base kernels k_q(x, x').
     output_dim : int
         Number of outputs (D).
-    rank : List[int] or None
+    latent_dim : List[int] or None
         Rank of each B_q.  Defaults to [output_dim]*Q.
     seed : int
         Random seed for initialisation.
@@ -36,18 +36,18 @@ class LMCKernel:
         self,
         base_kernels: List[Kernel],
         output_dim: int,
-        rank: Optional[List[int]] = None,
+        latent_dim: Optional[List[int]] = None,
         seed: int = 43,
     ):
         self.base_kernels = base_kernels
         self.output_dim = output_dim
 
-        if rank is None:
-            self.rank = [output_dim] * len(base_kernels)
+        if latent_dim is None:
+            self.latent_dim = [output_dim] * len(base_kernels)
         else:
-            if len(rank) != len(base_kernels):
-                raise ValueError("len(rank) must match len(base_kernels)")
-            self.rank = rank
+            if len(latent_dim) != len(base_kernels):
+                raise ValueError("len(latent_dim) must match len(base_kernels)")
+            self.latent_dim = latent_dim
 
         # All L_q elements are free
         self.Lq_params: List[np.ndarray] = []
@@ -55,7 +55,7 @@ class LMCKernel:
 
         np.random.seed(seed)
         start_idx = 0
-        for q, r in enumerate(self.rank):
+        for q, r in enumerate(self.latent_dim):
             n_params = output_dim * r  # ALL elements free
             Lq_vec = np.random.randn(n_params) #np.random.uniform(-1.0, 1.0, n_params)
             self.Lq_params.append(Lq_vec)
@@ -85,7 +85,7 @@ class LMCKernel:
     @params.setter
     def params(self, params: np.ndarray):
         start_idx = 0
-        for q, r in enumerate(self.rank):
+        for q, r in enumerate(self.latent_dim):
             n_params_Lq = self.output_dim * r
             self.Lq_params[q] = params[start_idx: start_idx + n_params_Lq]
             start_idx += n_params_Lq
@@ -106,8 +106,8 @@ class LMCKernel:
     # ------------------------------------------------------------------
 
     def _reconstruct_Lq(self, q: int) -> np.ndarray:
-        """Return L_q reshaped to (output_dim, rank[q])."""
-        r = self.rank[q]
+        """Return L_q reshaped to (output_dim, latent_dim[q])."""
+        r = self.latent_dim[q]
         return self.Lq_params[q].reshape(self.output_dim, r)
 
     def get_B(self, q: int) -> np.ndarray:
@@ -185,7 +185,7 @@ class LMCKernel:
             Lq = self._reconstruct_Lq(q)
 
             for i in range(self.output_dim):
-                for j in range(self.rank[q]):
+                for j in range(self.latent_dim[q]):
                     dB_q = self._compute_dB_q_dL(Lq, i, j)
                     gradients[param_idx] = np.kron(dB_q, K_spatial)
                     param_idx += 1
@@ -231,7 +231,7 @@ class LMCKernel:
             
             # Parcourir tous les paramètres (lignes 2 à output_dim-1)
             for i in range(self.output_dim):
-                for j in range(self.rank[q]):
+                for j in range(self.latent_dim[q]):
                     # Calculer dB_q par rapport à L_q[i,j]
                     dB_q = self._compute_dB_q_dL(L_q, i, j)
                     dB.append(dB_q)
@@ -252,7 +252,7 @@ class LMCKernel:
         Yc = Y - Y.mean(axis=0)
         U, S, Vt = np.linalg.svd(Yc, full_matrices=False)
 
-        for q, r in enumerate(self.rank):
+        for q, r in enumerate(self.latent_dim):
             L_pca = Vt.T[:, :r] * np.sqrt(S[:r])
             # All elements free — store as flat vector (output_dim * r,)
             self.Lq_params[q] = L_pca.flatten()

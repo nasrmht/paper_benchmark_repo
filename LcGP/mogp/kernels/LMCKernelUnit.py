@@ -26,7 +26,7 @@ class LMCKernelUnit:
         Args:
             base_kernels: List of base kernels k_q(x, x')
             output_dim: Number of outputs (dimension D)
-            latent_dim: List of ranks for each coregionalization matrix B_q
+            latent_dim: List of latent dimension of each matrix L_q associated with a base kernel. Should match the size of base kernels list
                  If None, all matrices will be of full latent_dim
         """
         self.base_kernels = base_kernels
@@ -38,7 +38,7 @@ class LMCKernelUnit:
             self.latent_dim = [output_dim] * len(base_kernels)
         else:
             if len(latent_dim) != len(base_kernels):
-                raise ValueError("The number of ranks must match the number of base kernels")
+                raise ValueError("The number of latent dimensions must match the number of base kernels")
             self.latent_dim = latent_dim
         
         # Initialize the Lq_unit matrices (without the first element which will be computed)

@@ -27,7 +27,7 @@ class LMCKernel:
     output_dim : int
         Number of outputs (D).
     latent_dim : List[int] or None
-        Rank of each B_q.  Defaults to [output_dim]*Q.
+        Latent dimension of each L_q.  Defaults to [output_dim]*Q.
     seed : int
         Random seed for initialisation.
     """

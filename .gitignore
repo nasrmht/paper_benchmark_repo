@@ -5,6 +5,14 @@ __pycache__/
 dist/
 build/
 
+benchmark_pca_gp/run_cfd.py
+benchmark_pca_gp/run_cfd_multiprocess.py
+benchmark_pca_gp/postprocessing/ms_analyse_cfd.py
+benchmark_pca_gp/postprocessing/ms_plot_cfd_fields.py
+benchmark_pca_gp/postprocessing/plot_cfd_poster.py
+benchmark_pca_gp/postprocessing/plot_cfd_rrmse.py
+benchmark_pca_gp/data/cfd.py
+
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb

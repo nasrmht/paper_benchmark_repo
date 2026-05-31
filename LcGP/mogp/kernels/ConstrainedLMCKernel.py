@@ -25,7 +25,7 @@ class LMCKernelConstrained:
             base_kernels: List of base kernels k_q(x, x')
             output_dim: Number of outputs (dimension D)
             u_vector: Constraint vector u of size output_dim. If None, a unit vector will be used.
-            latent_dim: List of latent dimension of each matrix L_q associated with a base kernel. Should match the size of base kernels list
+            latent_dim: List of latent dimensions of each matrix L_q associated with a base kernel. Should match the size of base kernels list
                  If None, all matrices will be of full latent_dim
             seed: Seed for random generation
         """

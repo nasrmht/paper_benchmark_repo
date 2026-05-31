@@ -26,7 +26,7 @@ class LMCKernelUnit:
         Args:
             base_kernels: List of base kernels k_q(x, x')
             output_dim: Number of outputs (dimension D)
-            latent_dim: List of latent dimension of each matrix L_q associated with a base kernel. Should match the size of base kernels list
+            latent_dim: List of latent dimensions of each matrix L_q associated with a base kernel. Should match the size of base kernels list
                  If None, all matrices will be of full latent_dim
         """
         self.base_kernels = base_kernels

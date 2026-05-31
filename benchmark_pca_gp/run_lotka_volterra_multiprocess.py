@@ -84,7 +84,7 @@ def parse_args():
     # --- Benchmark configuration (identical to run_lotka_volterra.py) ---
     p.add_argument("--quick", action="store_true",
                    help="Quick mode (few samples)")
-    p.add_argument("--storage_prefix", default="results_N_b=10_lv",
+    p.add_argument("--storage_prefix", default="results_N_h=10_lv",
                    help="Prefix of the results files (default: results_lv)")
     p.add_argument("--n_train",  type=int, default=None)
     p.add_argument("--n_total",  type=int, default=None)

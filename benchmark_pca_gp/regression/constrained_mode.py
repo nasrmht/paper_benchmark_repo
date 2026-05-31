@@ -66,9 +66,9 @@ class ConstrainedMOGPModeRegressor(ModeRegressor):
         self._model = MOGPR(
             kernel=kernel,
             noise_variance=self.noise_var,
-            use_efficient_lik=False,
+            use_efficient_lik=False
         )
-        fit_kw = dict(n_restarts=self.n_restarts, maxiter=self.maxiter, use_init_pca=True)
+        fit_kw = dict(n_restarts=self.n_restarts, maxiter=self.maxiter, use_init_pca=False)
         if self.seed is not None:
             fit_kw["seed"] = self.seed
         self._model.fit(X, w, **fit_kw)

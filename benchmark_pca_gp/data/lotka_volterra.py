@@ -29,6 +29,7 @@ Because H = 0, the centering pipeline only needs the α-multiplication step
 GP inputs (varied parameters): b, d   (2-dimensional)
 Fixed parameters: a=1.1, c=0.4, x0=(1.9, 0.3)
 """
+from numpy import float64
 import numpy as np
 from typing import List, Optional, Tuple
 from scipy.stats.qmc import LatinHypercube, scale
@@ -113,7 +114,7 @@ class LotkaVolterraDataset(Dataset):
     @property
     def constraint_vector(self) -> np.ndarray:
         """Unit constraint [1,1,1,1] satisfied by the z-fields after centering."""
-        return np.ones(4)
+        return np.ones(4, dtype=float64)
 
     @property
     def n_outputs(self) -> int:

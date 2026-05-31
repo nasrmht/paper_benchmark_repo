@@ -103,7 +103,7 @@ def build_benchmark_config(args) -> dict:
             latent_dim_lmc   = [2, 2],
             # RC (Constrained MOGP)
             n_kernels_rc     = 2,
-            latent_dim_rc    = [2, 1],
+            latent_dim_rc    = [2, 2],
             t_end            = 20.0,
             dt               = 0.001,
             fixed_indices    = [0, 1, 2, 3],

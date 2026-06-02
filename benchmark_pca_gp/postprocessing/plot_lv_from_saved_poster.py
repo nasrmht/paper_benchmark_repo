@@ -39,6 +39,12 @@ import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 
+plt.rcParams["text.usetex"] = True
+plt.rcParams["text.latex.preamble"] = (
+    r"\usepackage{amsmath}\usepackage{amssymb}\usepackage{bm}"
+    r"\AtBeginDocument{\boldmath\bfseries}"
+)
+
 from benchmark_pca_gp.postprocessing.analysis import MultiSeedAnalyzer
 
 # Default results directory — relative to this script's location

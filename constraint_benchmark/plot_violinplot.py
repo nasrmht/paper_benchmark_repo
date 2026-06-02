@@ -184,11 +184,11 @@ def plot_metric_for_poster(results, metric, poster_dir):
                 ax.set_yscale('log')
                 
         # Legend
-        handles = [mpatches.Patch(color=COLORS['mogp'], label='CMoGP'),
+        handles = [mpatches.Patch(color=COLORS['mogp'], label='CMOGP'),
                    mpatches.Patch(color=COLORS['indep'], label='Indep. GP'),
                    mpatches.Patch(color=COLORS['lcm'], label='LCM')]
         
-        fig.legend(handles=handles, loc='lower center', ncol=3, bbox_to_anchor=(0.5, -0.1), frameon=True, edgecolor='black')
+        fig.legend(handles=handles, loc='lower center', ncol=3, bbox_to_anchor=(0.5, -0.1), frameon=True, edgecolor='black', prop={'weight': 'bold', 'size': 14})
         
         plt.tight_layout()
         output_name_clean = output_name.split()[0] # e.g. f1

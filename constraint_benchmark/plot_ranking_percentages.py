@@ -59,7 +59,7 @@ except ImportError:
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants
 # ─────────────────────────────────────────────────────────────────────────────
-METHOD_LABELS  = ['CMoGP', 'Indep. GP', 'LCM']
+METHOD_LABELS  = ['CMOGP', 'Indep. GP', 'LCM']
 COLORS         = {'mogp': '#2E86AB', 'indep': '#F18F01', 'lcm': '#A23B72'}
 METHOD_COLORS  = [COLORS['mogp'], COLORS['indep'], COLORS['lcm']]
 

@@ -95,7 +95,7 @@ def build_benchmark_config(args) -> dict:
             n_train          = getattr(args, "n_train", None) or 10,
             n_total          = getattr(args, "n_total", None) or 100,
             n_modes_list     = [10],
-            n_restarts       = 30,
+            n_restarts       = 50,
             maxiter          = 150,
             noise_var        = 1e-4,
             # FM (MOGP-LCM)

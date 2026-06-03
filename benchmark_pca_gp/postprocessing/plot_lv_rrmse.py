@@ -222,7 +222,7 @@ def load_all_data(
     n_labels  = [label for _, label in zarr_specs]
 
     print("Computing PCA dominance metrics …")
-    agg_by_n = compute_pca_metrics(analyzers, max_m=10)
+    agg_by_n = compute_pca_metrics(analyzers, max_m=10, thm3_only=True, dt_fast=0.05)
 
     print("Collecting RRMSE records …")
     data: dict = {}
@@ -1047,270 +1047,270 @@ def _method_color(prefix: str, k: int) -> str:
     return C_FM.get(k, C_FM[0])
 
 
-def make_pca_gp_decomposition_figure(
-    data_recon:          dict,
-    n_labels:            List[str],
-    field_i:             int,
-    fs:                  dict,
-    m_list:              Optional[List[int]] = None,
-    best_worst_override: Optional[dict]      = None,
-    save:                bool                = True,
-    figsize:             Optional[Tuple[float, float]] = None,
-) -> plt.Figure:
-    """PCA-reconstruction vs full (PCA + GP) RRMSE stacked bar figure.
+# def make_pca_gp_decomposition_figure(
+#     data_recon:          dict,
+#     n_labels:            List[str],
+#     field_i:             int,
+#     fs:                  dict,
+#     m_list:              Optional[List[int]] = None,
+#     best_worst_override: Optional[dict]      = None,
+#     save:                bool                = True,
+#     figsize:             Optional[Tuple[float, float]] = None,
+# ) -> plt.Figure:
+#     """PCA-reconstruction vs full (PCA + GP) RRMSE stacked bar figure.
 
-    Layout: ``len(n_labels)`` rows × ``len(m_list)`` columns.
+#     Layout: ``len(n_labels)`` rows × ``len(m_list)`` columns.
 
-    Each panel (N, m):
-      - X axis : method variants — RC | CI(best, worst) | FI(best, worst) | FM(best, worst)
-      - Y axis : RRMSE (linear)
-      - Bar anatomy:
-          solid base (method colour)  = PCA reconstruction RRMSE
-          red-hatched extension       = GP overhead (Final − PCA)
-          black error bar at top      = ±1 std over seeds
+#     Each panel (N, m):
+#       - X axis : method variants — RC | CI(best, worst) | FI(best, worst) | FM(best, worst)
+#       - Y axis : RRMSE (linear)
+#       - Bar anatomy:
+#           solid base (method colour)  = PCA reconstruction RRMSE
+#           red-hatched extension       = GP overhead (Final − PCA)
+#           black error bar at top      = ±1 std over seeds
 
-    Parameters
-    ----------
-    m_list : latent dimensions to display, e.g. [2, 5, 8]. Default: [2, 5, 8].
-    best_worst_override : dict {prefix: (best_k, worst_k)} to fix which variants
-        are shown instead of auto-detecting from the data.
-    """
-    if m_list is None:
-        m_list = _DEFAULT_M_LIST
+#     Parameters
+#     ----------
+#     m_list : latent dimensions to display, e.g. [2, 5, 8]. Default: [2, 5, 8].
+#     best_worst_override : dict {prefix: (best_k, worst_k)} to fix which variants
+#         are shown instead of auto-detecting from the data.
+#     """
+#     if m_list is None:
+#         m_list = _DEFAULT_M_LIST
 
-    bw     = best_worst_override or _auto_best_worst(data_recon, n_labels, field_i)
-    layout = _bar_x_layout(bw)
+#     bw     = best_worst_override or _auto_best_worst(data_recon, n_labels, field_i)
+#     layout = _bar_x_layout(bw)
 
-    tick_xs    = [entry[3] for entry in layout]
-    tick_lbls  = [entry[2] for entry in layout]
-    groups     = {entry[4] for entry in layout}
-    all_x_span = (min(tick_xs) - _BAR_W, max(tick_xs) + _BAR_W)
+#     tick_xs    = [entry[3] for entry in layout]
+#     tick_lbls  = [entry[2] for entry in layout]
+#     groups     = {entry[4] for entry in layout}
+#     all_x_span = (min(tick_xs) - _BAR_W, max(tick_xs) + _BAR_W)
 
-    n_rows = len(n_labels)
-    n_cols = len(m_list)
-    if figsize is None:
-        figsize = (max(4, 1.6 * len(layout)) * n_cols, 3.8 * n_rows)
-    fig, axes = plt.subplots(
-        n_rows, n_cols,
-        figsize=figsize,
-        sharey="row",
-        squeeze=False,
-    )
-    fig.patch.set_facecolor("white")
+#     n_rows = len(n_labels)
+#     n_cols = len(m_list)
+#     if figsize is None:
+#         figsize = (max(4, 1.6 * len(layout)) * n_cols, 3.8 * n_rows)
+#     fig, axes = plt.subplots(
+#         n_rows, n_cols,
+#         figsize=figsize,
+#         sharey="row",
+#         squeeze=False,
+#     )
+#     fig.patch.set_facecolor("white")
 
-    fname_field = OUTPUT_NAMES[field_i]
+#     fname_field = OUTPUT_NAMES[field_i]
 
-    for row_i, n_label in enumerate(n_labels):
-        for col_i, m_val in enumerate(m_list):
-            ax = axes[row_i, col_i]
-            ax.set_facecolor(BG_COLOR)
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
+#     for row_i, n_label in enumerate(n_labels):
+#         for col_i, m_val in enumerate(m_list):
+#             ax = axes[row_i, col_i]
+#             ax.set_facecolor(BG_COLOR)
+#             ax.spines["top"].set_visible(False)
+#             ax.spines["right"].set_visible(False)
 
-            first_overhead = True
-            for prefix, k, tick_lbl, x_pos, group_label in layout:
-                key = (n_label, prefix, k)
-                recs = data_recon.get(key, [])
-                pred_mean, pred_std, recon_mean = _bar_stats_at_m(recs, field_i, m_val)
-                if pred_mean is None:
-                    continue
-                color = _method_color(prefix, k)
-                _draw_bar(ax, x_pos, pred_mean, pred_std, recon_mean,
-                          color, first_overhead)
-                if first_overhead and recon_mean is not None:
-                    first_overhead = False   # only label the legend once
+#             first_overhead = True
+#             for prefix, k, tick_lbl, x_pos, group_label in layout:
+#                 key = (n_label, prefix, k)
+#                 recs = data_recon.get(key, [])
+#                 pred_mean, pred_std, recon_mean = _bar_stats_at_m(recs, field_i, m_val)
+#                 if pred_mean is None:
+#                     continue
+#                 color = _method_color(prefix, k)
+#                 _draw_bar(ax, x_pos, pred_mean, pred_std, recon_mean,
+#                           color, first_overhead)
+#                 if first_overhead and recon_mean is not None:
+#                     first_overhead = False   # only label the legend once
 
-            # Cosmetics
-            ax.set_xticks(tick_xs)
-            ax.set_xticklabels(tick_lbls, fontsize=fs["tick"] * 0.85,
-                                fontweight="bold", rotation=0)
-            ax.tick_params(labelsize=fs["tick"])
-            for lbl in ax.get_yticklabels(which='both'):
-                lbl.set_fontweight("bold")
-            ax.grid(axis="y", linestyle=":", alpha=0.4)
-            ax.set_axisbelow(True)
-            ax.set_xlim(all_x_span)
+#             # Cosmetics
+#             ax.set_xticks(tick_xs)
+#             ax.set_xticklabels(tick_lbls, fontsize=fs["tick"] * 0.85,
+#                                 fontweight="bold", rotation=0)
+#             ax.tick_params(labelsize=fs["tick"])
+#             for lbl in ax.get_yticklabels(which='both'):
+#                 lbl.set_fontweight("bold")
+#             ax.grid(axis="y", linestyle=":", alpha=0.4)
+#             ax.set_axisbelow(True)
+#             ax.set_xlim(all_x_span)
 
-            if col_i == 0:
-                ax.set_ylabel(
-                    f"{n_label}\nRRMSE",
-                    fontsize=fs["label"], fontweight="bold",
-                )
-            ax.set_title(
-                f"$m = {m_val}$",
-                fontsize=fs["title"], fontweight="bold", pad=6,
-            )
-            if row_i == n_rows - 1:
-                ax.set_xlabel("Method / variant",
-                              fontsize=fs["label"], fontweight="bold")
+#             if col_i == 0:
+#                 ax.set_ylabel(
+#                     f"{n_label}\nRRMSE",
+#                     fontsize=fs["label"], fontweight="bold",
+#                 )
+#             ax.set_title(
+#                 f"$m = {m_val}$",
+#                 fontsize=fs["title"], fontweight="bold", pad=6,
+#             )
+#             if row_i == n_rows - 1:
+#                 ax.set_xlabel("Method / variant",
+#                               fontsize=fs["label"], fontweight="bold")
 
-    # Group bracket annotations — leave headroom at top (rect y1=0.92)
-    fig.tight_layout(rect=[0, 0.10, 1, 0.92])
-    for ax_row in axes:
-        for ax in ax_row:
-            _add_group_brackets(ax, layout, fs, y_frac=1.06)
+#     # Group bracket annotations — leave headroom at top (rect y1=0.92)
+#     fig.tight_layout(rect=[0, 0.10, 1, 0.92])
+#     for ax_row in axes:
+#         for ax in ax_row:
+#             _add_group_brackets(ax, layout, fs, y_frac=1.06)
 
-    # ── Legend ────────────────────────────────────────────────────────────────
-    # Method colour patches
-    legend_handles = []
-    for prefix, group_label in [("RC","Row-CMO"), ("CI","Col-Indep"), ("FI","Fw-Indep"), ("FM","Fw-LCM")]:
-        if group_label not in groups:
-            continue
-        if prefix == "RC":
-            k = -1
-        else:
-            k = bw[prefix][0] if prefix in bw else 0  # best k for colour sample
-        legend_handles.append(mpatches.Patch(
-            color=_method_color(prefix, k), alpha=0.88, label=group_label))
-    # PCA recon sentinel
-    legend_handles.append(mpatches.Patch(
-        facecolor="dimgray", alpha=0.55, label="PCA recon. (base)"))
-    # GP overhead sentinel
-    legend_handles.append(mpatches.Patch(
-        facecolor=_OVERHEAD_COLOR, alpha=_OVERHEAD_ALPHA,
-        hatch=_OVERHEAD_HATCH, label="GP overhead"))
+#     # ── Legend ────────────────────────────────────────────────────────────────
+#     # Method colour patches
+#     legend_handles = []
+#     for prefix, group_label in [("RC","Row-CMO"), ("CI","Col-Indep"), ("FI","Fw-Indep"), ("FM","Fw-LCM")]:
+#         if group_label not in groups:
+#             continue
+#         if prefix == "RC":
+#             k = -1
+#         else:
+#             k = bw[prefix][0] if prefix in bw else 0  # best k for colour sample
+#         legend_handles.append(mpatches.Patch(
+#             color=_method_color(prefix, k), alpha=0.88, label=group_label))
+#     # PCA recon sentinel
+#     legend_handles.append(mpatches.Patch(
+#         facecolor="dimgray", alpha=0.55, label="PCA recon. (base)"))
+#     # GP overhead sentinel
+#     legend_handles.append(mpatches.Patch(
+#         facecolor=_OVERHEAD_COLOR, alpha=_OVERHEAD_ALPHA,
+#         hatch=_OVERHEAD_HATCH, label="GP overhead"))
 
-    fig.legend(
-        handles=legend_handles,
-        loc="lower center",
-        bbox_to_anchor=(0.5, -0.02),
-        ncol=len(legend_handles),
-        frameon=True, framealpha=0.95, edgecolor="#ccc",
-        prop={"size": fs["legend"], "weight": "bold"},
-        bbox_transform=fig.transFigure,
-    )
-    fig.subplots_adjust(bottom=0.14)
+#     fig.legend(
+#         handles=legend_handles,
+#         loc="lower center",
+#         bbox_to_anchor=(0.5, -0.02),
+#         ncol=len(legend_handles),
+#         frameon=True, framealpha=0.95, edgecolor="#ccc",
+#         prop={"size": fs["legend"], "weight": "bold"},
+#         bbox_transform=fig.transFigure,
+#     )
+#     fig.subplots_adjust(bottom=0.14)
 
-    if save:
-        for ext in ["pdf", "png", "svg"]:
-            fname = f"paper_decomp_field_{fname_field}.{ext}"
-            dpi   = 300 if ext == "pdf" else 200
-            fig.savefig(fname, dpi=dpi, bbox_inches="tight",
-                        facecolor=fig.get_facecolor())
-            print(f"  ✓ {fname}")
-    return fig
+#     if save:
+#         for ext in ["pdf", "png", "svg"]:
+#             fname = f"paper_decomp_field_{fname_field}.{ext}"
+#             dpi   = 300 if ext == "pdf" else 200
+#             fig.savefig(fname, dpi=dpi, bbox_inches="tight",
+#                         facecolor=fig.get_facecolor())
+#             print(f"  ✓ {fname}")
+#     return fig
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Diagnostic table: PCA recon vs PCA+GP prediction
-# ──────────────────────────────────────────────────────────────────────────────
+# # ──────────────────────────────────────────────────────────────────────────────
+# # Diagnostic table: PCA recon vs PCA+GP prediction
+# # ──────────────────────────────────────────────────────────────────────────────
 
-def print_decomp_table(
-    data_recon: dict,
-    n_labels:   List[str],
-    m_list:     Optional[List[int]] = None,
-    fields:     Optional[List[int]] = None,
-) -> None:
-    """Print a formatted table of pred vs recon RRMSE for every method/variant.
+# def print_decomp_table(
+#     data_recon: dict,
+#     n_labels:   List[str],
+#     m_list:     Optional[List[int]] = None,
+#     fields:     Optional[List[int]] = None,
+# ) -> None:
+#     """Print a formatted table of pred vs recon RRMSE for every method/variant.
 
-    Helps diagnose:
-    - Whether ``cumulative_rrmse_recon_test`` is stored in the zarr files
-      (shows "N/A" in Recon column if absent).
-    - Whether the GP overhead is truly negligible or just too small to render.
+#     Helps diagnose:
+#     - Whether ``cumulative_rrmse_recon_test`` is stored in the zarr files
+#       (shows "N/A" in Recon column if absent).
+#     - Whether the GP overhead is truly negligible or just too small to render.
 
-    Parameters
-    ----------
-    fields : list of field indices to print (default: all Q fields).
-    """
-    if m_list is None:
-        m_list = _DEFAULT_M_LIST
-    if fields is None:
-        fields = list(range(Q))
+#     Parameters
+#     ----------
+#     fields : list of field indices to print (default: all Q fields).
+#     """
+#     if m_list is None:
+#         m_list = _DEFAULT_M_LIST
+#     if fields is None:
+#         fields = list(range(Q))
 
-    for field_i in fields:
-        fname = OUTPUT_NAMES[field_i]
-        for n_label in n_labels:
+#     for field_i in fields:
+#         fname = OUTPUT_NAMES[field_i]
+#         for n_label in n_labels:
 
-            # ── Header ────────────────────────────────────────────────────────
-            title = f"  Field={fname}  |  {n_label}  "
-            print(f"\n{'─' * 88}")
-            print(f"{title:^88}")
-            print(f"{'─' * 88}")
+#             # ── Header ────────────────────────────────────────────────────────
+#             title = f"  Field={fname}  |  {n_label}  "
+#             print(f"\n{'─' * 88}")
+#             print(f"{title:^88}")
+#             print(f"{'─' * 88}")
 
-            # Column headers: one block per m value
-            hdr_parts = [f"{'Method':>8}", f"{'l':>3}"]
-            for m_val in m_list:
-                hdr_parts.append(f"{'m='+str(m_val):>24}")
-            print("  " + "  ".join(hdr_parts))
+#             # Column headers: one block per m value
+#             hdr_parts = [f"{'Method':>8}", f"{'l':>3}"]
+#             for m_val in m_list:
+#                 hdr_parts.append(f"{'m='+str(m_val):>24}")
+#             print("  " + "  ".join(hdr_parts))
 
-            sub_hdr_parts = [f"{'':>8}", f"{'':>3}"]
-            for _ in m_list:
-                sub_hdr_parts.append(
-                    f"{'Pred':>7}  {'Recon':>7}  {'OH%':>6}")
-            print("  " + "  ".join(sub_hdr_parts))
-            print(f"  {'─' * 84}")
+#             sub_hdr_parts = [f"{'':>8}", f"{'':>3}"]
+#             for _ in m_list:
+#                 sub_hdr_parts.append(
+#                     f"{'Pred':>7}  {'Recon':>7}  {'OH%':>6}")
+#             print("  " + "  ".join(sub_hdr_parts))
+#             print(f"  {'─' * 84}")
 
-            # ── RC ────────────────────────────────────────────────────────────
-            row_parts = [f"{'RC':>8}", f"{'-':>3}"]
-            recon_missing = False
-            for m_val in m_list:
-                p, _, r = _bar_stats_at_m(
-                    data_recon.get((n_label, "RC", -1), []), field_i, m_val)
-                if p is None:
-                    row_parts.append(f"{'no data':>24}")
-                    continue
-                if r is None:
-                    recon_missing = True
-                    row_parts.append(
-                        f"{p:>7.4f}  {'N/A':>7}  {'N/A':>6}")
-                else:
-                    oh = p - r
-                    oh_pct = oh / p * 100 if p > 1e-15 else 0.0
-                    row_parts.append(
-                        f"{p:>7.4f}  {r:>7.4f}  {oh_pct:>5.1f}%")
-            print("  " + "  ".join(row_parts))
-            if recon_missing:
-                print("    ⚠  recon key absent for RC")
+#             # ── RC ────────────────────────────────────────────────────────────
+#             row_parts = [f"{'RC':>8}", f"{'-':>3}"]
+#             recon_missing = False
+#             for m_val in m_list:
+#                 p, _, r = _bar_stats_at_m(
+#                     data_recon.get((n_label, "RC", -1), []), field_i, m_val)
+#                 if p is None:
+#                     row_parts.append(f"{'no data':>24}")
+#                     continue
+#                 if r is None:
+#                     recon_missing = True
+#                     row_parts.append(
+#                         f"{p:>7.4f}  {'N/A':>7}  {'N/A':>6}")
+#                 else:
+#                     oh = p - r
+#                     oh_pct = oh / p * 100 if p > 1e-15 else 0.0
+#                     row_parts.append(
+#                         f"{p:>7.4f}  {r:>7.4f}  {oh_pct:>5.1f}%")
+#             print("  " + "  ".join(row_parts))
+#             if recon_missing:
+#                 print("    ⚠  recon key absent for RC")
 
-            # ── CI / FI / FM ──────────────────────────────────────────────────
-            for prefix in ["CI", "FI", "FM"]:
-                print(f"  {'─' * 40}")
-                for k in K_STARS:
-                    row_parts = [f"{prefix:>8}", f"{k:>3}"]
-                    recon_missing = False
-                    any_data = False
-                    for m_val in m_list:
-                        p, _, r = _bar_stats_at_m(
-                            data_recon.get((n_label, prefix, k), []),
-                            field_i, m_val)
-                        if p is None:
-                            row_parts.append(f"{'no data':>24}")
-                            continue
-                        any_data = True
-                        if r is None:
-                            recon_missing = True
-                            row_parts.append(
-                                f"{p:>7.4f}  {'N/A':>7}  {'N/A':>6}")
-                        else:
-                            oh = p - r
-                            oh_pct = oh / p * 100 if p > 1e-15 else 0.0
-                            flag = " ◀" if oh_pct > 20 else (
-                                   " ▼" if oh_pct < 0 else "")
-                            row_parts.append(
-                                f"{p:>7.4f}  {r:>7.4f}  {oh_pct:>5.1f}%{flag}")
-                    if any_data:
-                        print("  " + "  ".join(row_parts))
-                    if recon_missing:
-                        print(f"    ⚠  recon key absent for {prefix} l={k}")
+#             # ── CI / FI / FM ──────────────────────────────────────────────────
+#             for prefix in ["CI", "FI", "FM"]:
+#                 print(f"  {'─' * 40}")
+#                 for k in K_STARS:
+#                     row_parts = [f"{prefix:>8}", f"{k:>3}"]
+#                     recon_missing = False
+#                     any_data = False
+#                     for m_val in m_list:
+#                         p, _, r = _bar_stats_at_m(
+#                             data_recon.get((n_label, prefix, k), []),
+#                             field_i, m_val)
+#                         if p is None:
+#                             row_parts.append(f"{'no data':>24}")
+#                             continue
+#                         any_data = True
+#                         if r is None:
+#                             recon_missing = True
+#                             row_parts.append(
+#                                 f"{p:>7.4f}  {'N/A':>7}  {'N/A':>6}")
+#                         else:
+#                             oh = p - r
+#                             oh_pct = oh / p * 100 if p > 1e-15 else 0.0
+#                             flag = " ◀" if oh_pct > 20 else (
+#                                    " ▼" if oh_pct < 0 else "")
+#                             row_parts.append(
+#                                 f"{p:>7.4f}  {r:>7.4f}  {oh_pct:>5.1f}%{flag}")
+#                     if any_data:
+#                         print("  " + "  ".join(row_parts))
+#                     if recon_missing:
+#                         print(f"    ⚠  recon key absent for {prefix} l={k}")
 
-        print(f"\n{'═' * 88}")
+#         print(f"\n{'═' * 88}")
 
-    # ── Summary: recon availability ───────────────────────────────────────────
-    print("\n── Recon data availability ──")
-    for n_label in n_labels:
-        for prefix in ["RC", "CI", "FI", "FM"]:
-            ks = [-1] if prefix == "RC" else K_STARS
-            for k in ks:
-                recs = data_recon.get((n_label, prefix, k), [])
-                n_total = len(recs)
-                n_recon = sum(
-                    1 for r in recs if r.get("cum_rrmse_recon") is not None)
-                status = "✓ all" if n_recon == n_total and n_total > 0 \
-                    else (f"✗ 0/{n_total}" if n_recon == 0
-                          else f"⚠ {n_recon}/{n_total}")
-                k_str = str(k) if k != -1 else " -"
-                print(f"  {n_label:>5}  {prefix:>3}  l={k_str}  "
-                      f"seeds={n_total:>3}  recon={status}")
+#     # ── Summary: recon availability ───────────────────────────────────────────
+#     print("\n── Recon data availability ──")
+#     for n_label in n_labels:
+#         for prefix in ["RC", "CI", "FI", "FM"]:
+#             ks = [-1] if prefix == "RC" else K_STARS
+#             for k in ks:
+#                 recs = data_recon.get((n_label, prefix, k), [])
+#                 n_total = len(recs)
+#                 n_recon = sum(
+#                     1 for r in recs if r.get("cum_rrmse_recon") is not None)
+#                 status = "✓ all" if n_recon == n_total and n_total > 0 \
+#                     else (f"✗ 0/{n_total}" if n_recon == 0
+#                           else f"⚠ {n_recon}/{n_total}")
+#                 k_str = str(k) if k != -1 else " -"
+#                 print(f"  {n_label:>5}  {prefix:>3}  l={k_str}  "
+#                       f"seeds={n_total:>3}  recon={status}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1361,18 +1361,18 @@ def main():
         }, f)
     print("\nData saved to 'plot_lv_rrmse_data.pkl'.")
 
-    # ── Diagnostic table ──────────────────────────────────────────────────────
-    print_decomp_table(data_recon, n_labels, m_list=decomp_m_list)
+    # # ── Diagnostic table ──────────────────────────────────────────────────────
+    # print_decomp_table(data_recon, n_labels, m_list=decomp_m_list)
 
     # ── Generate figures ──────────────────────────────────────────────────────
     for i in range(Q):
         print(f"\n── Field {OUTPUT_NAMES[i]} ({i}) ──")
 
-        # Combined: dominance + full-range + zoom
-        fig = make_single_field_figure(
-            agg_by_n, data, n_labels, i, fs,
-            save=True, variant_filter=variant_filter, figsize=GLOBAL_FIGSIZE)
-        plt.close(fig)
+        # # Combined: dominance + full-range + zoom
+        # fig = make_single_field_figure(
+        #     agg_by_n, data, n_labels, i, fs,
+        #     save=True, variant_filter=variant_filter, figsize=GLOBAL_FIGSIZE)
+        # plt.close(fig)
 
         # Full-range only, with dominance panel
         fig_nozoom = make_single_field_figure_nozoom(
@@ -1381,12 +1381,12 @@ def main():
             include_dominance=True)
         plt.close(fig_nozoom)
 
-        # Full-range only, RRMSE only (no dominance)
-        fig_nozoom_rrmse = make_single_field_figure_nozoom(
-            agg_by_n, data, n_labels, i, fs,
-            save=True, variant_filter=variant_filter, figsize=GLOBAL_FIGSIZE,
-            include_dominance=False)
-        plt.close(fig_nozoom_rrmse)
+        # # Full-range only, RRMSE only (no dominance)
+        # fig_nozoom_rrmse = make_single_field_figure_nozoom(
+        #     agg_by_n, data, n_labels, i, fs,
+        #     save=True, variant_filter=variant_filter, figsize=GLOBAL_FIGSIZE,
+        #     include_dominance=False)
+        # plt.close(fig_nozoom_rrmse)
 
         # Zoom only (paper version, no dominance panel)
         fig_zoom = make_single_field_figure_zoom_only(
@@ -1394,12 +1394,12 @@ def main():
             save=True, variant_filter=variant_filter, figsize=GLOBAL_FIGSIZE)
         plt.close(fig_zoom)
 
-        # PCA-recon vs PCA+GP decomposition (stacked bar)
-        fig_decomp = make_pca_gp_decomposition_figure(
-            data_recon, n_labels, i, fs,
-            m_list=decomp_m_list,
-            save=True, figsize=DECOMP_FIGSIZE)
-        plt.close(fig_decomp)
+        # # PCA-recon vs PCA+GP decomposition (stacked bar)
+        # fig_decomp = make_pca_gp_decomposition_figure(
+        #     data_recon, n_labels, i, fs,
+        #     m_list=decomp_m_list,
+        #     save=True, figsize=DECOMP_FIGSIZE)
+        # plt.close(fig_decomp)
 
     print(f"\n✓ All {Q} fields done — 5 figure variants per field.")
 

@@ -512,7 +512,7 @@ def plot_combined_rmse(
 
 # ── Low-level math helpers ────────────────────────────────────────────────────
 
-def _load_train_fields(single_ana) -> dict:
+def _load_train_fields(single_ana, dt_override: float = None) -> dict:
     """Load raw training fields from one ResultsAnalyzer.
 
     Returns {field_0: ndarray(n_train, S), field_1: …, …}
@@ -523,13 +523,19 @@ def _load_train_fields(single_ana) -> dict:
     be present in the config (runner stores them since the pkl migration).
     Fields are converted to float64 to avoid float32 precision artefacts
     in SVD / eigendecomposition (especially when S is large).
+
+    Parameters
+    ----------
+    dt_override : when set, always regenerate trajectories using this dt
+        instead of the config value.  Pass 0.05 for fast approximate
+        loading (S=400 steps) when exact reconstruction is not required.
     """
     gt = single_ana.storage.load_ground_truth()
-    if gt["fields_train"] is not None:
+    if gt["fields_train"] is not None and dt_override is None:
         return {f"field_{i}": np.array(arr, dtype=np.float64)
                 for i, arr in enumerate(gt["fields_train"])}
 
-    # ── PKL backend: fields not stored — regenerate from dataset config ──────
+    # ── PKL backend or dt_override: regenerate from dataset config ───────────
     if hasattr(single_ana.storage, "_data"):
         cfg = single_ana.storage._data.get("config", {})
     else:
@@ -539,12 +545,12 @@ def _load_train_fields(single_ana) -> dict:
     seed    = int(cfg.get("seed",    0))
     n_train = int(cfg.get("n_train", 30))
     n_total = int(cfg.get("n_total", 100))
-    # t_end/dt stored since runner v2; fall back to standard LV run parameters
     t_end   = float(cfg["t_end"]) if cfg.get("t_end") is not None else 20.0
-    # Fall back to the LotkaVolterra class default (dt=0.05, S=400 steps).
-    # Old pkl files do not store dt; re-running with the updated runner saves it.
-    # Using dt=0.001 (original benchmark) would be exact but takes >60s/seed.
-    dt      = float(cfg["dt"])    if cfg.get("dt")    is not None else 0.05
+    # dt_override takes priority; fall back to config dt, then to 0.05.
+    # Config dt=0.001 (original benchmark) takes >60s/seed — use dt_override=0.05
+    # when exact fields are not required (e.g. Theorem 3 dominance plot).
+    dt = (dt_override if dt_override is not None
+          else (float(cfg["dt"]) if cfg.get("dt") is not None else 0.05))
 
     if "LotkaVolterra" in dataset_name:
         from benchmark_pca_gp.data.lotka_volterra import LotkaVolterraDataset
@@ -799,19 +805,103 @@ def _agg(metrics_list: list) -> dict:
     return result
 
 
+# ── Theorem-3-only fast path ──────────────────────────────────────────────────
+
+def _pca_metrics_one_seed_thm3(Y_raw: dict, max_m: int) -> dict:
+    """Theorem-3 quantities only: diff_exact and T.  Skips all Thm1/Thm2 work.
+
+    Omitted vs _pca_metrics_one_seed:
+      - self_fro2 / cross_fro2  (Q² gram products for Σ Frobenius distances)
+      - V_fw / D_fw             (field-wise SVDs, only needed for _sigma_op_diff)
+      - gaps_K / gaps_Sigma     (spectral gaps for Thm1/Thm2 denominators)
+      - k_norm_f / sig_norm_f   (norms for Thm1/Thm2 prefactors)
+      - sum_fro_K / sum_op_K    (K pairwise distances, Thm2)
+      - sum_fro_Sig / sum_op_Sig (Σ pairwise distances, Thm1)
+      - bnd_row / bnd_col       (the Thm1/Thm2 bounds themselves)
+      - err_fw                  (field-wise projection error)
+    """
+    fields = sorted(Y_raw.keys())
+    Q = len(fields)
+    Y = _center(Y_raw)
+    n, S = Y[fields[0]].shape
+
+    T = sum(float(np.sum(Y[f] ** 2)) for f in fields)
+
+    K_avg = sum(_gram(Y[f]) for f in fields) / Q
+
+    Y_row = np.vstack([Y[f] for f in fields])   # (n*Q, S)
+    V_row = _svd(Y_row)[2]
+    U_col = _svd(np.hstack([Y[f] for f in fields]))[0]
+
+    M_row    = (1.0 / (n * Q)) * (Y_row @ Y_row.T)
+    vals_row = _eigengaps(M_row)[0]
+    vals_col = _eigengaps(K_avg)[0]
+
+    m_range = np.arange(1, max_m + 1)
+    err_row = {f: np.zeros(max_m) for f in fields}
+    err_col = {f: np.zeros(max_m) for f in fields}
+
+    for i, m in enumerate(m_range):
+        V_row_m = V_row[:, :m]
+        U_col_m = U_col[:, :m]
+        for f in fields:
+            Yf = Y[f]
+            err_row[f][i] = _err_right(Yf, V_row_m)
+            err_col[f][i] = _err_left(Yf, U_col_m)
+
+    total_row  = np.array([sum(err_row[f][i] for f in fields) for i in range(max_m)])
+    total_col  = np.array([sum(err_col[f][i] for f in fields) for i in range(max_m)])
+    diff_exact = total_col - total_row
+    lambda_row = np.array([n * Q * np.sum(vals_row[:m]) for m in m_range])
+    lambda_col = np.array([Q * S * np.sum(vals_col[:m]) for m in m_range])
+    diff_tr    = lambda_row - lambda_col
+
+    return dict(fields=fields, m_range=m_range, T=T,
+                total_row=total_row, total_col=total_col,
+                diff_exact=diff_exact,
+                lambda_row=lambda_row, lambda_col=lambda_col,
+                diff_tr=diff_tr)
+
+
+def _agg_thm3(metrics_list: list) -> dict:
+    """Mean ± std over seeds — Theorem 3 quantities only."""
+    if not metrics_list:
+        return {}
+    ref    = metrics_list[0]
+    result = {"fields": ref["fields"], "m_range": ref["m_range"]}
+
+    T_arr = np.array([m["T"] for m in metrics_list])
+    result["T_mean"] = float(T_arr.mean())
+    result["T_std"]  = float(T_arr.std())
+
+    for key in ("total_row", "total_col", "diff_exact", "diff_tr",
+                "lambda_row", "lambda_col"):
+        arr = np.array([m[key] for m in metrics_list])
+        result[f"{key}_mean"] = arr.mean(axis=0)
+        result[f"{key}_std"]  = arr.std(axis=0)
+    return result
+
+
 # ── Public data-collection entry point ───────────────────────────────────────
 
 def compute_pca_metrics(
-    analyzers: List[Tuple[MultiSeedAnalyzer, str]],
-    max_m:     int = 10,
+    analyzers:  List[Tuple[MultiSeedAnalyzer, str]],
+    max_m:      int   = 10,
+    thm3_only:  bool  = False,
+    dt_fast:    float = None,
 ) -> dict:
     """Compute PCA comparison metrics for every n_train class.
 
     Parameters
     ----------
-    analyzers : list of (MultiSeedAnalyzer, label) in the same order used
-                for the combined GP-performance plots.
-    max_m     : maximum number of PCA modes to evaluate.
+    analyzers  : list of (MultiSeedAnalyzer, label) in the same order used
+                 for the combined GP-performance plots.
+    max_m      : maximum number of PCA modes to evaluate.
+    thm3_only  : skip Theorem 1 & 2 computations (much faster).
+                 Returns only the fields needed for plot_dominance.
+    dt_fast    : when set, override config dt for field regeneration.
+                 Combine with thm3_only=True and dt_fast=0.05 for fast
+                 approximate dominance curves (S=400 vs S=20000).
 
     Returns
     -------
@@ -822,11 +912,13 @@ def compute_pca_metrics(
         per_seed = []
         for single_ana in ana._analyzers:
             try:
-                Y_raw = _load_train_fields(single_ana)
-                per_seed.append(_pca_metrics_one_seed(Y_raw, max_m))
+                Y_raw = _load_train_fields(single_ana, dt_override=dt_fast)
+                metric_fn = _pca_metrics_one_seed_thm3 if thm3_only else _pca_metrics_one_seed
+                per_seed.append(metric_fn(Y_raw, max_m))
             except Exception as e:
                 print(f"  Warning (seed skipped for {label}): {e}")
-        results[label] = _agg(per_seed)
+        agg_fn = _agg_thm3 if thm3_only else _agg
+        results[label] = agg_fn(per_seed)
         print(f"  PCA metrics — {label}: {len(per_seed)} seeds aggregated.")
     return results
 

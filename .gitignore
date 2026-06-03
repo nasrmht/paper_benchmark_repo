@@ -36,6 +36,7 @@ figure_lv/
 .venv/
 venv/
 cgp_env/
+penv/
 
 *.zarr
 *.npz

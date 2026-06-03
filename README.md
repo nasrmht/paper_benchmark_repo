@@ -35,8 +35,7 @@ paper_benchmark_repo/
 │   └── plot_ranking_percentages.py  # Ranking percentage figure
 └── results/
     ├── constraint_benchmark/    # 192 pickle files (seeds 1–200)
-    ├── lotka_volterra/          # Zarr results, N=10/15/30, seeds 1–9
-    └── cfd/                     # Zarr results, N=20, seeds 20–28
+    ├── lotka_volterra/          # pkl results, N=10/15/30, seeds 1–10
 ```
 
 ---
@@ -101,7 +100,7 @@ With 200 seeds as in the paper, launch one job per seed on a cluster.
 
 ## 2. Reproduce figures — Lotka-Volterra
 
-Figures use pre-computed zarr results in `results/lotka_volterra/`.
+Figures use pre-computed pkl results in `results/lotka_volterra/`.
 
 ```bash
 cd benchmark_pca_gp/postprocessing
@@ -153,3 +152,28 @@ Results are stored in two formats:
 
 - **LcGP** is included directly in this repo. No separate installation needed.
 - The **constraint benchmark** data (200 pickle files) is committed to git (~1.6 MB total).
+
+
+## Optional: LaTeX rendering in Matplotlib
+
+Some figures use
+
+```python
+plt.rcParams["text.usetex"] = True
+```
+
+which requires a LaTeX installation.
+
+For Debian/Ubuntu:
+
+```bash
+sudo apt install texlive-latex-extra texlive-fonts-recommended dvipng
+```
+
+For TinyTeX:
+
+```bash
+tlmgr install collection-latexextra
+tlmgr install collection-fontsrecommended
+tlmgr install cm-super
+```

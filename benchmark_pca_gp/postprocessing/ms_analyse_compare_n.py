@@ -1,29 +1,39 @@
 """
-Comparative analysis across two training-set sizes.
+Comparative analysis across multiple training-set sizes (N=30 / N=15 / N=10).
 
-  results_lv11_seed*.zarr  →  n_train = 10
-  results_lv10_seed*.zarr  →  n_train = 30
+Results are loaded from .pkl files produced by run_lotka_volterra.py:
 
-Layout of the combined figures (one per metric: Q² and RMSE):
+  results/lotka_volterra/results_N_=30_lv_seed{1..10}.pkl  →  n_train = 30
+  results/lotka_volterra/results_N_=15_lv_seed{1..10}.pkl  →  n_train = 15
+  results/lotka_volterra/results_N_=10_lv_seed{1..10}.pkl  →  n_train = 10
+
+Layout of the combined figures (one per metric: Q² and RRMSE):
 
     row 0 (top)    → first entry in `analyzers`  (pass N=30 first)
-    row 1 (bottom) → second entry in `analyzers` (pass N=10 second)
-    columns        → one per output field (f0, f1, …)
+    row 1 (middle) → second entry                (e.g. N=15)
+    row 2 (bottom) → third entry                 (e.g. N=10)
+    columns        → one per output field (p, q, r, s)
 
 The y-axis is shared within each column (`sharey='col'`) so that the
-difference between N=30 and N=10 is shown on an identical scale.
+difference between training sizes is shown on an identical scale.
 
 Visual encoding:
-  - Our model (RC)  : bold solid line, thicker, vivid colour, drawn on top.
+  - Our model (RC)  : bold solid red line, drawn on top.
   - Baselines (CI/FI/FM) : thin non-solid lines, muted colours.
   - Small x-jitter per scenario so error bars don't overlap.
 """
 
 import sys
-sys.path.insert(0, '..')
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 
 import colorsys
 import numpy as np
+
+# Default results directory (relative to this script)
+_RESULTS_LV = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            '..', '..', 'results', 'lotka_volterra')
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 import matplotlib.patches as mpatches
@@ -507,12 +517,51 @@ def _load_train_fields(single_ana) -> dict:
 
     Returns {field_0: ndarray(n_train, S), field_1: …, …}
 
+    For zarr storage: fields are read directly from the archive.
+    For pkl storage (fields not saved): regenerated from the dataset using the
+    stored config (seed, n_train, n_total, t_end, dt).  Requires t_end/dt to
+    be present in the config (runner stores them since the pkl migration).
     Fields are converted to float64 to avoid float32 precision artefacts
     in SVD / eigendecomposition (especially when S is large).
     """
     gt = single_ana.storage.load_ground_truth()
-    return {f"field_{i}": np.array(arr, dtype=np.float64)
-            for i, arr in enumerate(gt["fields_train"])}
+    if gt["fields_train"] is not None:
+        return {f"field_{i}": np.array(arr, dtype=np.float64)
+                for i, arr in enumerate(gt["fields_train"])}
+
+    # ── PKL backend: fields not stored — regenerate from dataset config ──────
+    if hasattr(single_ana.storage, "_data"):
+        cfg = single_ana.storage._data.get("config", {})
+    else:
+        cfg = dict(single_ana.storage.store["config"].attrs)
+
+    dataset_name = cfg.get("dataset", "")
+    seed    = int(cfg.get("seed",    0))
+    n_train = int(cfg.get("n_train", 30))
+    n_total = int(cfg.get("n_total", 100))
+    # t_end/dt stored since runner v2; fall back to standard LV run parameters
+    t_end   = float(cfg["t_end"]) if cfg.get("t_end") is not None else 20.0
+    # Fall back to the LotkaVolterra class default (dt=0.05, S=400 steps).
+    # Old pkl files do not store dt; re-running with the updated runner saves it.
+    # Using dt=0.001 (original benchmark) would be exact but takes >60s/seed.
+    dt      = float(cfg["dt"])    if cfg.get("dt")    is not None else 0.05
+
+    if "LotkaVolterra" in dataset_name:
+        from benchmark_pca_gp.data.lotka_volterra import LotkaVolterraDataset
+        dataset = LotkaVolterraDataset(t_end=t_end, dt=dt, n_train=n_train)
+        X, fields = dataset.generate(n_total, seed)
+        X_tr, X_te, f_tr, f_te = dataset.split_train_test(X, fields, n_train, seed)
+        # Reproduce the z-space NC transform used by the runner before storage
+        f_tr_z, _, means_z = dataset.center(f_tr, f_te, X_train=X_tr, X_test=X_te)
+        Q = dataset.n_outputs
+        f_tr_model = [f_tr_z[k] + means_z[k] for k in range(Q)]
+        return {f"field_{i}": np.array(f, dtype=np.float64)
+                for i, f in enumerate(f_tr_model)}
+
+    raise RuntimeError(
+        f"Cannot load training fields: pkl storage does not save fields_train "
+        f"and dataset '{dataset_name}' has no regeneration support."
+    )
 
 
 def _center(Y_dict: dict) -> dict:
@@ -1047,16 +1096,28 @@ plot_pca_lemma5 = plot_pca_theorem3_dominance
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    import matplotlib
+    matplotlib.use("Agg")   # headless rendering
 
-    list_n30 = [f"results_lv_n=10_30/results_N=30_lv_seed{i}.zarr" for i in range(10)]
-    list_n15 = [f"results_lv_n=10_30/results_N=15_lv_seed{i}.zarr" for i in range(10)]
-    list_n10 = [f"results_lv_n=10_30/results_N=10_lv_seed{i}.zarr" for i in range(10)]
+    # ── Data sources ─────────────────────────────────────────────────────────
+    # Seeds 1..10 for each N.  Filter out missing files gracefully.
+    def _pkl_paths(n: int):
+        return [p for i in range(1, 11)
+                if os.path.exists(
+                    p := os.path.join(_RESULTS_LV,
+                                      f"results_N_={n}_lv_seed{i}.pkl"))]
+
+    list_n30 = _pkl_paths(30)
+    list_n15 = _pkl_paths(15)
+    list_n10 = _pkl_paths(10)
+
+    for label, paths in [("N=30", list_n30), ("N=15", list_n15), ("N=10", list_n10)]:
+        print(f"  {label}: {len(paths)} seeds found")
 
     ana_n30 = MultiSeedAnalyzer(list_n30)
     ana_n15 = MultiSeedAnalyzer(list_n15)
     ana_n10 = MultiSeedAnalyzer(list_n10)
 
-    # N=30 → top row;   N=10 → bottom row
     analyzers = [(ana_n30, "N=30"), (ana_n15, "N=15"), (ana_n10, "N=10")]
 
     for ana, label in analyzers:
@@ -1068,21 +1129,25 @@ if __name__ == "__main__":
 
     model_types = ["RC", "FI", "CI", "FM"]
 
+    # ── RRMSE / Q² combined figures ───────────────────────────────────────────
     fig_q2 = plot_combined_q2(
         analyzers,
         model_types=model_types,
-        output_path="combined_q2_vs_modes.png",
-        figsize=(11,4)
+        output_path="combined_q2_vs_modes.pdf",
+        figsize=(14, 9)
     )
+    plt.close(fig_q2)
 
     fig_rmse = plot_combined_rmse(
         analyzers,
         model_types=model_types,
         output_path="combined_rmse_vs_modes.pdf",
-        figsize=(14,8)
+        figsize=(14, 9)
     )
+    plt.close(fig_rmse)
 
-    # # ── PCA comparison analysis ───────────────────────────────────────────────
+    # # ── PCA comparison analysis (Theorems 1 / 2 / 3) ─────────────────────────
+    # # Training fields are regenerated from the dataset (using the stored seed).
     # print("\n" + "=" * 60)
     # print("PCA COMPARISON  (Theorem 1 / Theorem 2 / Theorem 3)")
     # print("=" * 60)
@@ -1091,20 +1156,23 @@ if __name__ == "__main__":
 
     # fig_thm1 = plot_pca_theorem1(
     #     agg_by_n,
-    #     figsize=(11, 8),
-    #     output_path="pca_theorem1_row_bound.svg",
+    #     figsize=(14, 8),
+    #     output_path="pca_theorem1_row_bound.pdf",
     # )
+    # plt.close(fig_thm1)
 
     # fig_thm2 = plot_pca_theorem2_col(
     #     agg_by_n,
-    #     figsize=(11, 8),
-    #     output_path="pca_theorem2_col_bound.svg",
+    #     figsize=(14, 8),
+    #     output_path="pca_theorem2_col_bound.pdf",
     # )
+    # plt.close(fig_thm2)
 
     # fig_thm3 = plot_pca_theorem3_dominance(
     #     agg_by_n,
-    #     figsize=(10, 5),
-    #     output_path="pca_theorem3_dominance.svg",
+    #     figsize=(12, 5),
+    #     output_path="pca_theorem3_dominance.pdf",
     # )
+    # plt.close(fig_thm3)
 
-    # plt.show()
+    print("\nDone — figures saved in the current directory.")

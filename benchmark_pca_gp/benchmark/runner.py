@@ -107,6 +107,8 @@ class BenchmarkRunner:
             "n_outputs":   self.dataset.n_outputs,
             "input_dim":   self.dataset.input_dim,
             "constraint_u": self.dataset.constraint_vector.tolist(),
+            "t_end":    getattr(self.dataset, "t_end", None),
+            "dt":       getattr(self.dataset, "dt",    None),
         })
         self.storage.save_ground_truth(X_tr, X_te, f_tr_model, f_te_model)
 

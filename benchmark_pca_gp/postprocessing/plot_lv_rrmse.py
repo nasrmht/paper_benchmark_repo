@@ -1,11 +1,8 @@
 """
-Proposal A (v5) — Poster / Paper figure generator
 
 Layouts produced (one file per output field p, q, r, s):
-  combined  poster_AA_field_{f}.{ext}       — dominance + full-range + zoom
   nozoom    poster_A_field_{f}_nozoom.{ext} — dominance + full-range only
   zoom_only paper_A_field_{f}_zoom.{ext}    — zoom panels only (paper use)
-  decomp    paper_decomp_field_{f}.{ext}    — stacked bar: PCA recon vs PCA+GP
 
 Features
 --------
@@ -14,14 +11,11 @@ Features
   - variant_filter : dict mapping prefix to list of fixed_idx to display
       e.g. {"CI": [0, 2], "FI": [0, 2], "FM": [0, 2]}
       → only two variants per deductive method instead of four
-  - Decomposition figure: for each chosen m, shows PCA reconstruction RRMSE
-      (solid bar) + GP overhead (red-hatched extension). Best and worst
-      variant per deductive method auto-detected or overrideable.
   - load_all_data() accepts a zarr_specs list for arbitrary n_train sets
 
 Usage
 -----
-    python plot_proposal_A.py                       # default N=30, N=10
+    python plot_lv_rrmse.py                       # default N=30, N=10
     # or edit zarr_specs / variant_filter in main() below
 """
 
@@ -532,12 +526,12 @@ def make_single_field_figure(
             lbl.set_fontsize(fs["tick"])
 
     if save:
-        for ext in ["pdf", "png", "svg"]:
+        for ext in ["pdf", "png"]:  # "svg"
             fname = f"poster_AA_field_{fname_field}.{ext}"
             dpi   = 300 if ext == "pdf" else 200
             fig.savefig(fname, dpi=dpi, bbox_inches="tight",
                         facecolor=fig.get_facecolor())
-            print(f"  ✓ {fname}")
+            print(f"ok {fname}")
     return fig
 
 
@@ -590,12 +584,12 @@ def make_single_field_figure_nozoom(
 
     if save:
         suffix = "nozoom" if include_dominance else "nozoom_rrmse_only"
-        for ext in ["pdf", "png", "svg"]:
+        for ext in ["pdf", "png"]: #"svg"
             fname = f"poster_A_field_{fname_field}_{suffix}.{ext}"
             dpi   = 300 if ext == "pdf" else 200
             fig.savefig(fname, dpi=dpi, bbox_inches="tight",
                         facecolor=fig.get_facecolor())
-            print(f"  ✓ {fname}")
+            print(f"Ok {fname}")
     return fig
 
 
@@ -637,680 +631,15 @@ def make_single_field_figure_zoom_only(
             lbl.set_fontsize(fs["tick"])
 
     if save:
-        for ext in ["pdf", "png", "svg"]:
+        for ext in ["pdf", "png"]: #"svg"
             fname = f"paper_A_field_{fname_field}_zoom.{ext}"
             dpi   = 300 if ext == "pdf" else 200
             fig.savefig(fname, dpi=dpi, bbox_inches="tight",
                         facecolor=fig.get_facecolor())
-            print(f"  ✓ {fname}")
+            print(f"ok {fname}")
     return fig
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# PCA-reconstruction  vs  PCA+GP decomposition figure
-# ──────────────────────────────────────────────────────────────────────────────
-
-_DEFAULT_M_LIST   = [2, 5, 8]    # default latent dimensions to display
-_OVERHEAD_HATCH   = "//"         # hatch pattern for GP-overhead portion
-_OVERHEAD_COLOR   = "#d73027"    # red for GP overhead
-_OVERHEAD_ALPHA   = 0.30
-_BAR_W            = 0.10         # bar width (in x-axis units)
-_GAP_INNER        = 0.08         # gap between bars in the same group
-_GAP_OUTER        = 0.30         # gap between method groups
-
-# Default constraint vector for Lotka-Volterra (u=[1,1,1,1])
-_LV_U = np.array([1.0, 1.0, 1.0, 1.0])
-
-# ── Module-level caches (populated once, reused across all calls) ─────────────
-# Avoids reloading ground truth and refitting PCA for each model/filter call.
-_gt_cache:    dict = {}   # zarr_path → (fields_train_c, fields_test_c, means_train)
-_recon_cache: dict = {}   # (zarr_path, pca_type, n_modes, fixed_idx) → (M,Q) or None
-
-
-def _get_gt_cached(storage) -> tuple:
-    """Load and cache ground truth for a zarr file (load once per path)."""
-    path = storage.path
-    if path not in _gt_cache:
-        gt = storage.load_ground_truth()
-        ft, fe = gt["fields_train"], gt["fields_test"]
-        mt = [f.mean(axis=0) for f in ft]
-        _gt_cache[path] = (
-            [ft[i] - mt[i] for i in range(len(ft))],
-            [fe[i] - mt[i] for i in range(len(fe))],
-            mt,
-        )
-    return _gt_cache[path]
-
-
-def _compute_recon_rrmse_from_zarr(storage, model_name: str,
-                                   u: np.ndarray) -> Optional[np.ndarray]:
-    """Recompute cumulative PCA reconstruction RRMSE from stored ground truth.
-
-    Ground truth is loaded ONCE per zarr (cached in ``_gt_cache``).
-    PCA is fitted ONCE per unique ``(path, pca_type, n_modes, fixed_idx)``
-    combination (cached in ``_recon_cache``).
-
-    Only useful for zarr archives where ``cumulative_rrmse_recon_test`` was
-    not stored.  For pkl storage, this function returns None immediately
-    (fields are not stored in pkl).
-
-    Parameters
-    ----------
-    storage    : storage backend (ZarrBenchmarkStorage or PklBenchmarkStorage)
-    model_name : name of the model inside the store
-    u          : constraint vector (e.g. [1,1,1,1] for LotkaVolterra)
-
-    Returns
-    -------
-    cum_rrmse_recon : (M, Q) numpy array, or None if pca_type unknown / pkl.
-    """
-    from benchmark_pca_gp.reduction.rowwise   import RowwisePCA
-    from benchmark_pca_gp.reduction.colwise   import ColwisePCA
-    from benchmark_pca_gp.reduction.fieldwise import FieldwisePCA
-
-    # pkl does not store fields — cannot recompute
-    if storage.path.endswith(".pkl"):
-        return None
-
-    res       = storage.load_model_result_light(model_name)
-    cfg       = res.get("config", {})
-    pca_type  = cfg.get("pca_type", "")
-    n_modes   = int(cfg.get("n_modes", 10))
-    fixed_raw = cfg.get("fixed_idx", -1)
-    fixed_idx = None if (fixed_raw is None or fixed_raw == -1) else int(fixed_raw)
-
-    cache_key = (storage.path, pca_type, n_modes, fixed_idx)
-    if cache_key in _recon_cache:
-        return _recon_cache[cache_key]
-
-    # Load GT once per zarr (cached)
-    fields_train_c, fields_test_c, means_train = _get_gt_cached(storage)
-
-    if pca_type == "RowwisePCA":
-        reducer = RowwisePCA(n_modes=n_modes)
-    elif pca_type == "ColwisePCA":
-        if fixed_idx is None:
-            _recon_cache[cache_key] = None
-            return None
-        reducer = ColwisePCA(n_modes=n_modes, fixed_idx=fixed_idx)
-    elif pca_type == "FieldwisePCA":
-        reducer = FieldwisePCA(n_modes=n_modes)
-    else:
-        _recon_cache[cache_key] = None
-        return None
-
-    reducer.fit(fields_train_c)
-    result = reducer.cumulative_reconstruction_error(
-        fields_test_c, means_train, "test",
-        fixed_idx=fixed_idx, u=u,
-    )
-    recon = result.get("cumulative_rrmse_test")   # (M, Q)
-    _recon_cache[cache_key] = recon
-    return recon
-
-
-def _warm_up_single_zarr(storage_path: str, u: np.ndarray) -> None:
-    """Pre-populate GT and recon caches for all models in one storage file.
-
-    Works with both .zarr and .pkl backends.  For pkl, the recon data is
-    already stored as ``cumulative_rrmse_test`` in intermediate, so no
-    recomputation is needed — this function just skips those gracefully.
-    Safe to call concurrently for different paths.
-    """
-    if not os.path.exists(storage_path):
-        return
-    from benchmark_pca_gp.benchmark.storage import open_storage
-    try:
-        storage = open_storage(storage_path, mode="r")
-        # GT caching only meaningful for zarr (pkl has no fields)
-        if not storage_path.endswith(".pkl"):
-            _get_gt_cached(storage)
-        for name in storage.list_models():
-            res   = storage.load_model_result_light(name)
-            inter = res.get("intermediate", {})
-            # Accept both key names (zarr legacy vs pkl current)
-            if (inter.get("cumulative_rrmse_recon_test") is not None
-                    or inter.get("cumulative_rrmse_test") is not None):
-                continue   # already present, no need to recompute
-            if storage_path.endswith(".pkl"):
-                continue   # pkl has no fields; cannot recompute
-            try:
-                _compute_recon_rrmse_from_zarr(storage, name, u)
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-
-def _warm_up_recon_parallel(paths: List[str], u: np.ndarray,
-                             max_workers: int = 4) -> None:
-    """Warm up GT/recon caches across zarr files using a thread pool.
-
-    Uses threads (not processes) because:
-    - Zarr I/O releases the GIL, so threads get real I/O parallelism.
-    - Caches are module-level dicts shared between threads (no pickling).
-    - For small N (LV), the PCA is trivial; I/O is the bottleneck.
-    """
-    new_paths = [p for p in paths if p not in _gt_cache]
-    if not new_paths:
-        return
-    n = min(max_workers, len(new_paths))
-    if n <= 1:
-        for p in new_paths:
-            _warm_up_single_zarr(p, u)
-        return
-    from concurrent.futures import ThreadPoolExecutor
-    print(f"  Parallel PCA warm-up: {len(new_paths)} zarr files, {n} threads …",
-          flush=True)
-    with ThreadPoolExecutor(max_workers=n) as ex:
-        list(ex.map(lambda p: _warm_up_single_zarr(p, u), new_paths))
-
-
-def _collect_records_with_recon_all(ana, n_label: str,
-                                    u: np.ndarray) -> dict:
-    """Single-pass over all seeds × models: returns dict (prefix, fixed_idx) → records.
-
-    One call replaces the 13 separate filter calls that ``load_recon_data``
-    used to issue.  Ground truth and PCA are loaded/fitted at most once per
-    zarr file thanks to ``_gt_cache`` / ``_recon_cache``.
-    """
-    all_records: dict = {}
-    for seed, single_ana in zip(ana._seeds, ana._analyzers):
-        for name in single_ana.list_models():
-            prefix    = name.split("_")[0]
-            res       = single_ana.storage.load_model_result_light(name)
-            cfg       = res.get("config", {})
-            inter     = res.get("intermediate", {})
-            fixed_idx = int(cfg.get("fixed_idx", -1))
-
-            cum_pred  = inter.get("cumulative_rrmse_pred_test")
-            if cum_pred is None:
-                continue
-
-            # Accept both naming conventions:
-            #   "cumulative_rrmse_recon_test" — zarr files (old key)
-            #   "cumulative_rrmse_test"       — pkl files (current key from reducer)
-            cum_recon = (inter.get("cumulative_rrmse_recon_test")
-                         or inter.get("cumulative_rrmse_test"))
-            if cum_recon is None:
-                try:
-                    cum_recon = _compute_recon_rrmse_from_zarr(
-                        single_ana.storage, name, u)
-                except Exception:
-                    cum_recon = None
-
-            key = (prefix, fixed_idx)
-            all_records.setdefault(key, []).append({
-                "seed":            seed,
-                "prefix":          prefix,
-                "fixed_idx":       fixed_idx,
-                "cum_rrmse":       np.array(cum_pred),
-                "cum_rrmse_recon": np.array(cum_recon) if cum_recon is not None else None,
-                "n_train_label":   n_label,
-            })
-    return all_records
-
-
-def load_recon_data(
-    zarr_specs:  Optional[List[Tuple[List[str], str]]] = None,
-    u:           Optional[np.ndarray] = None,
-    max_workers: int = 4,
-) -> Tuple[dict, List[str]]:
-    """Load records including PCA reconstruction RRMSE.
-
-    If ``cumulative_rrmse_recon_test`` is absent from the zarr intermediate
-    dict (old zarr files), it is recomputed automatically from the stored
-    ground-truth fields by re-fitting the PCA.
-
-    Performance
-    -----------
-    - Ground truth loaded ONCE per zarr file (cached).
-    - PCA fitted ONCE per unique ``(pca_type, n_modes, fixed_idx)`` per zarr
-      (cached).  With e.g. 3 n_modes values and 4 model types, this means
-      ~21 PCA fits per zarr instead of ~48 × 13 = 624 in the naïve approach.
-    - Warm-up runs in parallel across zarr files (``max_workers`` threads).
-
-    Parameters
-    ----------
-    zarr_specs  : same format as load_all_data().  None = default N=30/N=10.
-    u           : constraint vector.  Defaults to [1,1,1,1] (LotkaVolterra).
-    max_workers : number of threads for parallel warm-up (set to 1 to disable).
-
-    Returns
-    -------
-    data_recon : dict[(n_label, prefix, k) → records]
-    n_labels   : list of N labels in input order.
-    """
-    if zarr_specs is None:
-        zarr_specs = [
-            ([os.path.join(_RESULTS_LV, f"results_N_=30_lv_seed{i}.pkl") for i in range(1, 10)], "N=30"),
-            ([os.path.join(_RESULTS_LV, f"results_N_=10_lv_seed{i}.pkl") for i in range(1, 10)], "N=10"),
-        ]
-    if u is None:
-        u = _LV_U
-
-    # ── Parallel warm-up: populate GT + recon caches across all zarr files ──
-    all_paths = [p for paths, _ in zarr_specs for p in paths]
-    _warm_up_recon_parallel(all_paths, u, max_workers=max_workers)
-
-    # ── Single-pass collection per analyzer ──────────────────────────────────
-    analyzers = [(MultiSeedAnalyzer(paths), label) for paths, label in zarr_specs]
-    n_labels  = [label for _, label in zarr_specs]
-    data_recon: dict = {}
-
-    for ana, n_label in analyzers:
-        all_recs = _collect_records_with_recon_all(ana, n_label, u=u)
-        data_recon[(n_label, "RC", -1)] = all_recs.get(("RC", -1), [])
-        for k in K_STARS:
-            for prefix in ["CI", "FI", "FM"]:
-                data_recon[(n_label, prefix, k)] = all_recs.get((prefix, k), [])
-
-    return data_recon, n_labels
-
-
-def _bar_stats_at_m(
-    records: List[dict], field_i: int, m_val: int
-) -> Tuple[Optional[float], float, Optional[float]]:
-    """Return (pred_mean, pred_std, recon_mean) at latent dimension m_val."""
-    m_idx = m_val - 1   # 1-indexed → 0-indexed
-    preds, recons = [], []
-    for r in records:
-        arr_p = r.get("cum_rrmse")
-        if arr_p is not None:
-            a = np.asarray(arr_p)
-            if m_idx < a.shape[0]:
-                preds.append(float(a[m_idx, field_i]))
-        arr_r = r.get("cum_rrmse_recon")
-        if arr_r is not None:
-            a = np.asarray(arr_r)
-            if m_idx < a.shape[0]:
-                recons.append(float(a[m_idx, field_i]))
-    pred_mean  = float(np.mean(preds))  if preds  else None
-    pred_std   = float(np.std(preds))   if preds  else 0.0
-    recon_mean = float(np.mean(recons)) if recons else None
-    return pred_mean, pred_std, recon_mean
-
-
-def _auto_best_worst(
-    data_recon: dict, n_labels: List[str], field_i: int
-) -> Dict[str, Tuple[int, int]]:
-    """For each deductive prefix (CI/FI/FM) find (best_k, worst_k)
-    by mean pred-RRMSE over all stored m values and all N labels."""
-    result: dict = {}
-    for prefix in ["CI", "FI", "FM"]:
-        scores: dict = {}
-        for k in K_STARS:
-            vals = []
-            for n_label in n_labels:
-                key = (n_label, prefix, k)
-                if key in data_recon:
-                    _, mu, _ = extract_rrmse_stats(data_recon[key], field_i)
-                    if mu is not None:
-                        vals.append(float(mu.mean()))
-            if vals:
-                scores[k] = float(np.mean(vals))
-        if not scores:
-            continue
-        best  = min(scores, key=scores.get)
-        worst = max(scores, key=scores.get)
-        result[prefix] = (best, worst)
-    return result
-
-
-def _bar_x_layout(bw: dict) -> List[Tuple[str, int, str, float, str]]:
-    """Build bar layout: list of (prefix, k, tick_label, x_pos, group_label).
-
-    Groups: RC alone, then CI/FI/FM each with (best, worst).
-    Positions computed with _BAR_W, _GAP_INNER, _GAP_OUTER.
-    """
-    layout = []  # (prefix, k, tick_label, x_pos, group_label)
-    cursor = 0.0
-
-    def _add_group(prefix, ks, group_label):
-        nonlocal cursor
-        for j, k in enumerate(ks):
-            if j > 0:
-                cursor += _BAR_W + _GAP_INNER
-            lbl = prefix if k == -1 else f"l={k}"
-            layout.append((prefix, k, lbl, cursor, group_label))
-        cursor += _BAR_W + _GAP_OUTER
-
-    _add_group("RC", [-1], "Row-CMO")
-    for prefix, group_label in [("CI", "Col-Indep"), ("FI", "Fw-Indep"), ("FM", "Fw-LCM")]:
-        if prefix in bw:
-            best, worst = bw[prefix]
-            ks = [best] if best == worst else [best, worst]
-            _add_group(prefix, ks, group_label)
-
-    return layout
-
-
-def _draw_bar(
-    ax, x: float, pred_mean: float, pred_std: float,
-    recon_mean: Optional[float], color: str,
-    first_overhead: bool,
-) -> None:
-    """Draw one stacked bar: PCA recon (solid) + GP overhead (red hatch)."""
-    recon_h  = max(recon_mean if recon_mean is not None else 0.0, 0.0)
-    pred_h   = max(pred_mean, recon_h)
-    overhead = pred_h - recon_h
-
-    if recon_mean is not None:
-        # Solid base: PCA reconstruction
-        ax.bar(x, recon_h, width=_BAR_W, color=color, alpha=0.88,
-               edgecolor="white", linewidth=0.2, zorder=3)
-        # Hatched top: GP overhead
-        if overhead > 1e-8 * pred_h:
-            lbl = "GP overhead" if first_overhead else None
-            ax.bar(x, overhead, bottom=recon_h, width=_BAR_W,
-                   color=_OVERHEAD_COLOR, alpha=_OVERHEAD_ALPHA,
-                   hatch=_OVERHEAD_HATCH, edgecolor=_OVERHEAD_COLOR,
-                   linewidth=0.2, zorder=4, label=lbl)
-    else:
-        # Recon not available: draw total bar only, lighter
-        ax.bar(x, pred_h, width=_BAR_W, color=color, alpha=0.6,
-               edgecolor="white", linewidth=0.2, zorder=3)
-
-    # Seed-std error bar at the top of the pred bar
-    if pred_std > 0:
-        ax.errorbar(x, pred_h, yerr=pred_std,
-                    color="black", linewidth=0.9,
-                    capsize=3.5, capthick=0.9, zorder=10)
-
-
-def _add_group_brackets(ax, layout, fs: dict, y_frac: float = 1.04) -> None:
-    """Draw horizontal bracket + group label above each method group."""
-    groups: dict = {}
-    for prefix, k, _, x, group_label in layout:
-        groups.setdefault(group_label, []).append(x)
-
-    y_top = ax.get_ylim()[1] * y_frac
-
-    for g_label, xs in groups.items():
-        x_lo, x_hi = min(xs) - _BAR_W * 0.4, max(xs) + _BAR_W * 0.4
-        x_mid = (x_lo + x_hi) / 2
-        # Bracket line
-        ax.annotate("",
-                    xy=(x_hi, y_top), xytext=(x_lo, y_top),
-                    xycoords="data", textcoords="data",
-                    arrowprops=dict(arrowstyle="-", color="dimgray", lw=1.0))
-        # Label
-        ax.text(x_mid, y_top * 1.01, g_label,
-                ha="center", va="bottom",
-                fontsize=fs["annot"], fontweight="bold", color="dimgray")
-
-
-def _method_color(prefix: str, k: int) -> str:
-    if prefix == "RC": return C_RC
-    if prefix == "CI": return C_CI.get(k, C_CI[0])
-    if prefix == "FI": return C_FI.get(k, C_FI[0])
-    return C_FM.get(k, C_FM[0])
-
-
-# def make_pca_gp_decomposition_figure(
-#     data_recon:          dict,
-#     n_labels:            List[str],
-#     field_i:             int,
-#     fs:                  dict,
-#     m_list:              Optional[List[int]] = None,
-#     best_worst_override: Optional[dict]      = None,
-#     save:                bool                = True,
-#     figsize:             Optional[Tuple[float, float]] = None,
-# ) -> plt.Figure:
-#     """PCA-reconstruction vs full (PCA + GP) RRMSE stacked bar figure.
-
-#     Layout: ``len(n_labels)`` rows × ``len(m_list)`` columns.
-
-#     Each panel (N, m):
-#       - X axis : method variants — RC | CI(best, worst) | FI(best, worst) | FM(best, worst)
-#       - Y axis : RRMSE (linear)
-#       - Bar anatomy:
-#           solid base (method colour)  = PCA reconstruction RRMSE
-#           red-hatched extension       = GP overhead (Final − PCA)
-#           black error bar at top      = ±1 std over seeds
-
-#     Parameters
-#     ----------
-#     m_list : latent dimensions to display, e.g. [2, 5, 8]. Default: [2, 5, 8].
-#     best_worst_override : dict {prefix: (best_k, worst_k)} to fix which variants
-#         are shown instead of auto-detecting from the data.
-#     """
-#     if m_list is None:
-#         m_list = _DEFAULT_M_LIST
-
-#     bw     = best_worst_override or _auto_best_worst(data_recon, n_labels, field_i)
-#     layout = _bar_x_layout(bw)
-
-#     tick_xs    = [entry[3] for entry in layout]
-#     tick_lbls  = [entry[2] for entry in layout]
-#     groups     = {entry[4] for entry in layout}
-#     all_x_span = (min(tick_xs) - _BAR_W, max(tick_xs) + _BAR_W)
-
-#     n_rows = len(n_labels)
-#     n_cols = len(m_list)
-#     if figsize is None:
-#         figsize = (max(4, 1.6 * len(layout)) * n_cols, 3.8 * n_rows)
-#     fig, axes = plt.subplots(
-#         n_rows, n_cols,
-#         figsize=figsize,
-#         sharey="row",
-#         squeeze=False,
-#     )
-#     fig.patch.set_facecolor("white")
-
-#     fname_field = OUTPUT_NAMES[field_i]
-
-#     for row_i, n_label in enumerate(n_labels):
-#         for col_i, m_val in enumerate(m_list):
-#             ax = axes[row_i, col_i]
-#             ax.set_facecolor(BG_COLOR)
-#             ax.spines["top"].set_visible(False)
-#             ax.spines["right"].set_visible(False)
-
-#             first_overhead = True
-#             for prefix, k, tick_lbl, x_pos, group_label in layout:
-#                 key = (n_label, prefix, k)
-#                 recs = data_recon.get(key, [])
-#                 pred_mean, pred_std, recon_mean = _bar_stats_at_m(recs, field_i, m_val)
-#                 if pred_mean is None:
-#                     continue
-#                 color = _method_color(prefix, k)
-#                 _draw_bar(ax, x_pos, pred_mean, pred_std, recon_mean,
-#                           color, first_overhead)
-#                 if first_overhead and recon_mean is not None:
-#                     first_overhead = False   # only label the legend once
-
-#             # Cosmetics
-#             ax.set_xticks(tick_xs)
-#             ax.set_xticklabels(tick_lbls, fontsize=fs["tick"] * 0.85,
-#                                 fontweight="bold", rotation=0)
-#             ax.tick_params(labelsize=fs["tick"])
-#             for lbl in ax.get_yticklabels(which='both'):
-#                 lbl.set_fontweight("bold")
-#             ax.grid(axis="y", linestyle=":", alpha=0.4)
-#             ax.set_axisbelow(True)
-#             ax.set_xlim(all_x_span)
-
-#             if col_i == 0:
-#                 ax.set_ylabel(
-#                     f"{n_label}\nRRMSE",
-#                     fontsize=fs["label"], fontweight="bold",
-#                 )
-#             ax.set_title(
-#                 f"$m = {m_val}$",
-#                 fontsize=fs["title"], fontweight="bold", pad=6,
-#             )
-#             if row_i == n_rows - 1:
-#                 ax.set_xlabel("Method / variant",
-#                               fontsize=fs["label"], fontweight="bold")
-
-#     # Group bracket annotations — leave headroom at top (rect y1=0.92)
-#     fig.tight_layout(rect=[0, 0.10, 1, 0.92])
-#     for ax_row in axes:
-#         for ax in ax_row:
-#             _add_group_brackets(ax, layout, fs, y_frac=1.06)
-
-#     # ── Legend ────────────────────────────────────────────────────────────────
-#     # Method colour patches
-#     legend_handles = []
-#     for prefix, group_label in [("RC","Row-CMO"), ("CI","Col-Indep"), ("FI","Fw-Indep"), ("FM","Fw-LCM")]:
-#         if group_label not in groups:
-#             continue
-#         if prefix == "RC":
-#             k = -1
-#         else:
-#             k = bw[prefix][0] if prefix in bw else 0  # best k for colour sample
-#         legend_handles.append(mpatches.Patch(
-#             color=_method_color(prefix, k), alpha=0.88, label=group_label))
-#     # PCA recon sentinel
-#     legend_handles.append(mpatches.Patch(
-#         facecolor="dimgray", alpha=0.55, label="PCA recon. (base)"))
-#     # GP overhead sentinel
-#     legend_handles.append(mpatches.Patch(
-#         facecolor=_OVERHEAD_COLOR, alpha=_OVERHEAD_ALPHA,
-#         hatch=_OVERHEAD_HATCH, label="GP overhead"))
-
-#     fig.legend(
-#         handles=legend_handles,
-#         loc="lower center",
-#         bbox_to_anchor=(0.5, -0.02),
-#         ncol=len(legend_handles),
-#         frameon=True, framealpha=0.95, edgecolor="#ccc",
-#         prop={"size": fs["legend"], "weight": "bold"},
-#         bbox_transform=fig.transFigure,
-#     )
-#     fig.subplots_adjust(bottom=0.14)
-
-#     if save:
-#         for ext in ["pdf", "png", "svg"]:
-#             fname = f"paper_decomp_field_{fname_field}.{ext}"
-#             dpi   = 300 if ext == "pdf" else 200
-#             fig.savefig(fname, dpi=dpi, bbox_inches="tight",
-#                         facecolor=fig.get_facecolor())
-#             print(f"  ✓ {fname}")
-#     return fig
-
-
-# # ──────────────────────────────────────────────────────────────────────────────
-# # Diagnostic table: PCA recon vs PCA+GP prediction
-# # ──────────────────────────────────────────────────────────────────────────────
-
-# def print_decomp_table(
-#     data_recon: dict,
-#     n_labels:   List[str],
-#     m_list:     Optional[List[int]] = None,
-#     fields:     Optional[List[int]] = None,
-# ) -> None:
-#     """Print a formatted table of pred vs recon RRMSE for every method/variant.
-
-#     Helps diagnose:
-#     - Whether ``cumulative_rrmse_recon_test`` is stored in the zarr files
-#       (shows "N/A" in Recon column if absent).
-#     - Whether the GP overhead is truly negligible or just too small to render.
-
-#     Parameters
-#     ----------
-#     fields : list of field indices to print (default: all Q fields).
-#     """
-#     if m_list is None:
-#         m_list = _DEFAULT_M_LIST
-#     if fields is None:
-#         fields = list(range(Q))
-
-#     for field_i in fields:
-#         fname = OUTPUT_NAMES[field_i]
-#         for n_label in n_labels:
-
-#             # ── Header ────────────────────────────────────────────────────────
-#             title = f"  Field={fname}  |  {n_label}  "
-#             print(f"\n{'─' * 88}")
-#             print(f"{title:^88}")
-#             print(f"{'─' * 88}")
-
-#             # Column headers: one block per m value
-#             hdr_parts = [f"{'Method':>8}", f"{'l':>3}"]
-#             for m_val in m_list:
-#                 hdr_parts.append(f"{'m='+str(m_val):>24}")
-#             print("  " + "  ".join(hdr_parts))
-
-#             sub_hdr_parts = [f"{'':>8}", f"{'':>3}"]
-#             for _ in m_list:
-#                 sub_hdr_parts.append(
-#                     f"{'Pred':>7}  {'Recon':>7}  {'OH%':>6}")
-#             print("  " + "  ".join(sub_hdr_parts))
-#             print(f"  {'─' * 84}")
-
-#             # ── RC ────────────────────────────────────────────────────────────
-#             row_parts = [f"{'RC':>8}", f"{'-':>3}"]
-#             recon_missing = False
-#             for m_val in m_list:
-#                 p, _, r = _bar_stats_at_m(
-#                     data_recon.get((n_label, "RC", -1), []), field_i, m_val)
-#                 if p is None:
-#                     row_parts.append(f"{'no data':>24}")
-#                     continue
-#                 if r is None:
-#                     recon_missing = True
-#                     row_parts.append(
-#                         f"{p:>7.4f}  {'N/A':>7}  {'N/A':>6}")
-#                 else:
-#                     oh = p - r
-#                     oh_pct = oh / p * 100 if p > 1e-15 else 0.0
-#                     row_parts.append(
-#                         f"{p:>7.4f}  {r:>7.4f}  {oh_pct:>5.1f}%")
-#             print("  " + "  ".join(row_parts))
-#             if recon_missing:
-#                 print("    ⚠  recon key absent for RC")
-
-#             # ── CI / FI / FM ──────────────────────────────────────────────────
-#             for prefix in ["CI", "FI", "FM"]:
-#                 print(f"  {'─' * 40}")
-#                 for k in K_STARS:
-#                     row_parts = [f"{prefix:>8}", f"{k:>3}"]
-#                     recon_missing = False
-#                     any_data = False
-#                     for m_val in m_list:
-#                         p, _, r = _bar_stats_at_m(
-#                             data_recon.get((n_label, prefix, k), []),
-#                             field_i, m_val)
-#                         if p is None:
-#                             row_parts.append(f"{'no data':>24}")
-#                             continue
-#                         any_data = True
-#                         if r is None:
-#                             recon_missing = True
-#                             row_parts.append(
-#                                 f"{p:>7.4f}  {'N/A':>7}  {'N/A':>6}")
-#                         else:
-#                             oh = p - r
-#                             oh_pct = oh / p * 100 if p > 1e-15 else 0.0
-#                             flag = " ◀" if oh_pct > 20 else (
-#                                    " ▼" if oh_pct < 0 else "")
-#                             row_parts.append(
-#                                 f"{p:>7.4f}  {r:>7.4f}  {oh_pct:>5.1f}%{flag}")
-#                     if any_data:
-#                         print("  " + "  ".join(row_parts))
-#                     if recon_missing:
-#                         print(f"    ⚠  recon key absent for {prefix} l={k}")
-
-#         print(f"\n{'═' * 88}")
-
-#     # ── Summary: recon availability ───────────────────────────────────────────
-#     print("\n── Recon data availability ──")
-#     for n_label in n_labels:
-#         for prefix in ["RC", "CI", "FI", "FM"]:
-#             ks = [-1] if prefix == "RC" else K_STARS
-#             for k in ks:
-#                 recs = data_recon.get((n_label, prefix, k), [])
-#                 n_total = len(recs)
-#                 n_recon = sum(
-#                     1 for r in recs if r.get("cum_rrmse_recon") is not None)
-#                 status = "✓ all" if n_recon == n_total and n_total > 0 \
-#                     else (f"✗ 0/{n_total}" if n_recon == 0
-#                           else f"⚠ {n_recon}/{n_total}")
-#                 k_str = str(k) if k != -1 else " -"
-#                 print(f"  {n_label:>5}  {prefix:>3}  l={k_str}  "
-#                       f"seeds={n_total:>3}  recon={status}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1339,40 +668,26 @@ def main():
     # Computer Modern for \mathcal{E} bold without error
     plt.rcParams["mathtext.fontset"] = "cm"
 
-    # ── m values for the decomposition figure ────────────────────────────────
-    decomp_m_list = [2, 5, 8]
-
     # ── Load & compute ────────────────────────────────────────────────────────
     agg_by_n, data, n_labels = load_all_data(zarr_specs)
     fs = _poster_fs(scale=FONT_SCALE)
 
-    u = _LV_U
-    print("\nLoading reconstruction RRMSE data …")
-    data_recon, _ = load_recon_data(zarr_specs, u=u, max_workers=-1)
 
-    # ── Save data for fast subsequent plotting ────────────────────────────────
-    import pickle
-    with open("plot_lv_rrmse_data.pkl", "wb") as f:
-        pickle.dump({
-            "agg_by_n":  agg_by_n,
-            "data":      data,
-            "n_labels":  n_labels,
-            "data_recon": data_recon,
-        }, f)
-    print("\nData saved to 'plot_lv_rrmse_data.pkl'.")
+    # # ── Save data for fast subsequent plotting ────────────────────────────────
+    # import pickle
+    # with open("plot_lv_rrmse_data.pkl", "wb") as f:
+    #     pickle.dump({
+    #         "agg_by_n":  agg_by_n,
+    #         "data":      data,
+    #         "n_labels":  n_labels,
+    # #        "data_recon": data_recon,
+    #     }, f)
+    # print("\nData saved to 'plot_lv_rrmse_data.pkl'.")
 
-    # # ── Diagnostic table ──────────────────────────────────────────────────────
-    # print_decomp_table(data_recon, n_labels, m_list=decomp_m_list)
 
     # ── Generate figures ──────────────────────────────────────────────────────
     for i in range(Q):
         print(f"\n── Field {OUTPUT_NAMES[i]} ({i}) ──")
-
-        # # Combined: dominance + full-range + zoom
-        # fig = make_single_field_figure(
-        #     agg_by_n, data, n_labels, i, fs,
-        #     save=True, variant_filter=variant_filter, figsize=GLOBAL_FIGSIZE)
-        # plt.close(fig)
 
         # Full-range only, with dominance panel
         fig_nozoom = make_single_field_figure_nozoom(
@@ -1381,12 +696,7 @@ def main():
             include_dominance=True)
         plt.close(fig_nozoom)
 
-        # # Full-range only, RRMSE only (no dominance)
-        # fig_nozoom_rrmse = make_single_field_figure_nozoom(
-        #     agg_by_n, data, n_labels, i, fs,
-        #     save=True, variant_filter=variant_filter, figsize=GLOBAL_FIGSIZE,
-        #     include_dominance=False)
-        # plt.close(fig_nozoom_rrmse)
+
 
         # Zoom only (paper version, no dominance panel)
         fig_zoom = make_single_field_figure_zoom_only(
@@ -1394,12 +704,6 @@ def main():
             save=True, variant_filter=variant_filter, figsize=GLOBAL_FIGSIZE)
         plt.close(fig_zoom)
 
-        # # PCA-recon vs PCA+GP decomposition (stacked bar)
-        # fig_decomp = make_pca_gp_decomposition_figure(
-        #     data_recon, n_labels, i, fs,
-        #     m_list=decomp_m_list,
-        #     save=True, figsize=DECOMP_FIGSIZE)
-        # plt.close(fig_decomp)
 
     print(f"\n✓ All {Q} fields done — 5 figure variants per field.")
 
